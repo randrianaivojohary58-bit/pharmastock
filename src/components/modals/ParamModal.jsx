@@ -4,7 +4,8 @@ import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 
 export default function ParamModal({ isOpen, onClose, type }) {
-  const { settings, setSettings } = useData();
+  // On récupère updateSettings depuis le contexte
+  const { settings, updateSettings } = useData();
   const { showToast } = useToast();
   const [form, setForm] = useState(settings);
 
@@ -12,10 +13,16 @@ export default function ParamModal({ isOpen, onClose, type }) {
     setForm(settings);
   }, [settings, isOpen]);
 
-  const handleSave = () => {
-    setSettings(form);
-    showToast('Succès', 'Paramètres enregistrés');
-    onClose();
+  const handleSave = async () => {
+    // On utilise updateSettings pour sauvegarder dans Supabase
+    const result = await updateSettings(form);
+    
+    if (result.success) {
+      showToast('Succès', 'Paramètres enregistrés');
+      onClose();
+    } else {
+      showToast('Erreur', 'Impossible de sauvegarder les paramètres', 'error');
+    }
   };
 
   const getTitle = () => {

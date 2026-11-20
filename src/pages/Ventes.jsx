@@ -19,14 +19,14 @@ export default function Ventes() {
   const [deleteId, setDeleteId] = useState(null);
 
   const filtered = sales.filter(s =>
-    (s.number || '').toLowerCase().includes(search.toLowerCase()) || 
+    (s.number || '').toLowerCase().includes(search.toLowerCase()) ||
     (s.client || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalMonth = sales.reduce((s, sale) => 
+  const totalMonth = sales.reduce((s, sale) =>
     s + (sale.products || []).reduce((a, p) => a + (p.quantity || 0) * (p.price || 0) * (1 + (p.tva || 0) / 100), 0), 0
   );
-  const cartons = sales.reduce((s, sale) => 
+  const cartons = sales.reduce((s, sale) =>
     s + (sale.products || []).reduce((a, p) => a + (p.quantity || 0), 0), 0
   );
 
@@ -74,7 +74,7 @@ export default function Ventes() {
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Total</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Paiement</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Échéance</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Utilisateur</th> {/* <-- NOUVELLE COLONNE */}
+                <th className="px-4 py-3 text-left font-bold text-gray-600">Utilisateur</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Statut</th>
                 <th className="px-4 py-3 text-center font-bold text-gray-600">Actions</th>
               </tr>
@@ -92,7 +92,7 @@ export default function Ventes() {
                   const productsList = sale.products || [];
                   const total = productsList.reduce((a, p) => a + (p.quantity || 0) * (p.price || 0) * (1 + (p.tva || 0) / 100), 0);
                   const cartonsCount = productsList.reduce((a, p) => a + (p.quantity || 0), 0);
-                  
+
                   return (
                     <tr key={sale.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{sale.number}</td>
@@ -106,7 +106,6 @@ export default function Ventes() {
                       <td className="px-4 py-3 font-bold text-emerald-700">{formatMoney(total)}</td>
                       <td className="px-4 py-3 text-gray-600">{sale.payment || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{sale.echeance ? formatDate(sale.echeance) : '—'}</td>
-                      {/* 👇 NOUVELLE VALEUR UTILISATEUR */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <User className="w-3 h-3 text-emerald-600" />

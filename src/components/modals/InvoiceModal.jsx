@@ -27,10 +27,25 @@ export default function InvoiceModal({ isOpen, onClose, sale }) {
       }
     >
       <div className="invoice-print text-gray-800">
-        {/* Le contenu de la facture reste le même */}
         <div className="flex justify-between items-start pb-5 border-b-2 border-emerald-500 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center text-2xl font-bold">℞</div>
+          
+          {/* --- MODIFICATION DE L'EN-TÊTE AVEC LE LOGO --- */}
+          <div className="flex items-center gap-4">
+            {/* Remplacement du cercle vert par l'image du logo */}
+            <img 
+              src="/logo.png" 
+              alt="Logo" 
+              className="w-16 h-16 object-contain" 
+              onError={(e) => {
+                e.target.style.display = 'none'; // Cache l'image si elle n'est pas trouvée
+                e.target.nextSibling.style.display = 'flex'; // Affiche le fallback (le cercle)
+              }}
+            />
+            {/* Fallback : le cercle vert s'affiche si l'image est introuvable */}
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white hidden items-center justify-center text-2xl font-bold">
+              ℞
+            </div>
+
             <div>
               <h2 className="text-lg font-bold text-emerald-700">{settings.company.name}</h2>
               <p className="text-xs text-gray-500">Grossiste Pharmaceutique</p>
@@ -38,6 +53,7 @@ export default function InvoiceModal({ isOpen, onClose, sale }) {
               <p className="text-xs text-gray-500">NIF : {settings.company.nif} — STAT : {settings.company.stat}</p>
             </div>
           </div>
+
           <div className="text-right">
             <h3 className="text-xl font-bold text-emerald-700 tracking-wider">FACTURE</h3>
             <p className="text-sm font-bold mt-1">{sale.number}</p>

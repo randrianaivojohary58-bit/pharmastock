@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import CustomSelect from '../common/CustomSelect';
+import AiScanner from '../common/AiScanner'; // <-- IMPORT AJOUTÉ
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { formatMoney } from '../../utils/format';
@@ -11,23 +12,70 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
   const isEdit = !!purchase;
 
   const [form, setForm] = useState({
-    supplier: '', date: '2026-09-22', number: '', status: 'Reçu',
+    supplier: '', date: new Date().toISOString().split('T')[0], number: '', status: 'Reçu',
     tvaRate: 20, remiseRate: 0, lines: []
   });
 
   const supplierOptions = suppliers.map(s => s.name);
 
   useEffect(() => {
-    if (purchase) {
-      setForm({
-        supplier: purchase.supplier, date: purchase.date, number: purchase.number,
-        status: purchase.status, tvaRate: purchase.tvaRate, remiseRate: purchase.remiseRate,
-        lines: purchase.products.map(p => ({ ...p, price: p.price }))
-      });
-    } else {
-      setForm({ supplier: '', date: '2026-09-22', number: '', status: 'Reçu', tvaRate: 20, remiseRate: 0, lines: [{ productId: '', quantity: 1, price: 0 }] });
+    if (isOpen) {
+      if (purchase) {
+        setForm({
+          supplier: purchase.supplier, date: purchase.date, number: purchase.number,
+          status: purchase.status, tvaRate: purchase.tvaRate, remiseRate: purchase.remiseRate,
+          lines: purchase.products.map(p => ({ 
+            productId: p.productId, 
+            quantity: p.quantity, 
+            price: p.price 
+          }))
+        });
+      } else {
+        setForm({ 
+          supplier: '', 
+          date: new Date().toISOString().split('T')[0], 
+          number: '', 
+          status: 'Reçu', 
+          tvaRate: 20, 
+          remiseRate: 0, 
+          lines: [{ productId: '', quantity: 1, price: 0 }] 
+        });
+      }
     }
   }, [purchase, isOpen]);
+
+  // --- NOUVELLE FONCTION POUR L'IA ---
+  const handleAiData = (data) => {
+    // 1. Chercher le fournisseur
+    const matchedSupplier = suppliers.find(s => 
+      s.name.toLowerCase().includes((data.supplier || '').toLowerCase()) ||
+      (data.supplier || '').toLowerCase().includes(s.name.toLowerCase())
+    );
+
+    // 2. Chercher les produits
+    const mappedLines = (data.products || []).map(aiProduct => {
+      const matchedProduct = products.find(p => 
+        p.name.toLowerCase().includes((aiProduct.name || '').toLowerCase()) ||
+        (aiProduct.name || '').toLowerCase().includes(p.name.toLowerCase())
+      );
+      return {
+        productId: matchedProduct ? matchedProduct.id : '',
+        quantity: aiProduct.quantity || 1,
+        price: aiProduct.price || 0
+      };
+    });
+
+    // 3. Mettre à jour le formulaire
+    setForm({
+      supplier: matchedSupplier ? matchedSupplier.name : (data.supplier || ''),
+      date: data.date || new Date().toISOString().split('T')[0],
+      number: data.number || '',
+      status: 'Reçu',
+      tvaRate: data.tvaRate || 20,
+      remiseRate: data.remiseRate || 0,
+      lines: mappedLines.length > 0 ? mappedLines : [{ productId: '', quantity: 1, price: 0 }]
+    });
+  };
 
   const addLine = () => setForm({ ...form, lines: [...form.lines, { productId: '', quantity: 1, price: 0 }] });
   const removeLine = (i) => form.lines.length > 1 && setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
@@ -85,6 +133,18 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
       }
     >
       <div className="space-y-5">
+        
+        {/* --- BOUTON SCANNER AJOUTÉ ICI --- */}
+        {!isEdit && (
+          <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+            <div>
+              <p className="text-xs font-bold text-indigo-900">Remplissage automatique</p>
+              <p className="text-[10px] text-indigo-600">Scannez une facture pour remplir le formulaire</p>
+            </div>
+            <AiScanner onDataExtracted={handleAiData} />
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <CustomSelect label="Fournisseur *" options={supplierOptions} value={form.supplier} onChange={(v) => setForm({ ...form, supplier: v })} placeholder="Rechercher fournisseur..." />
           <div>
@@ -112,7 +172,7 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
             {form.lines.map((line, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
-                  <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs">
+                  <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className={`w-full h-9 px-2 border rounded-lg text-xs ${!line.productId ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
                     <option value="">Sélectionner</option>
                     {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>

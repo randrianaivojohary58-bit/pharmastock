@@ -19,7 +19,7 @@ export default function Achats() {
   const [deleteId, setDeleteId] = useState(null);
 
   const filtered = purchases.filter(p =>
-    (p.number || '').toLowerCase().includes(search.toLowerCase()) || 
+    (p.number || '').toLowerCase().includes(search.toLowerCase()) ||
     (p.supplier || '').toLowerCase().includes(search.toLowerCase())
   );
 
@@ -43,7 +43,7 @@ export default function Achats() {
         subtitle="Gestion des approvisionnements"
         action={
           <button onClick={() => { setEdit(null); setModalOpen(true); }}
-            className="h-10 px-4 bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-2 hover:bg-emerald-700">
+            className="h-10 px-4 bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-2 hover:bg-emerald-700 shadow-sm transition-colors">
             <Plus className="w-4 h-4" /> Nouvel achat
           </button>
         }
@@ -72,7 +72,7 @@ export default function Achats() {
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Total HT</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">TVA</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Total TTC</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Utilisateur</th> {/* <-- NOUVELLE COLONNE */}
+                <th className="px-4 py-3 text-left font-bold text-gray-600">Utilisateur</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Statut</th>
                 <th className="px-4 py-3 text-center font-bold text-gray-600">Actions</th>
               </tr>
@@ -106,7 +106,6 @@ export default function Achats() {
                       <td className="px-4 py-3">{formatMoney(sub)}</td>
                       <td className="px-4 py-3">{tvaRate}%</td>
                       <td className="px-4 py-3 font-bold text-emerald-700">{formatMoney(totalTTC)}</td>
-                      {/* 👇 NOUVELLE VALEUR UTILISATEUR */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <User className="w-3 h-3 text-emerald-600" />
@@ -141,8 +140,15 @@ export default function Achats() {
         </div>
       </div>
 
-      <PurchaseModal isOpen={modalOpen} onClose={() => setModalOpen(false)} purchase={edit} />
+      {/* On repasse à l'appel de PurchaseModal standard */}
+      <PurchaseModal 
+        isOpen={modalOpen} 
+        onClose={() => setModalOpen(false)} 
+        purchase={edit} 
+      />
+      
       <PurchaseDetailModal isOpen={!!detail} onClose={() => setDetail(null)} purchase={detail} />
+      
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer l'achat ?"

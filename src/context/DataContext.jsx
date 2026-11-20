@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from './AuthContext'; // <-- IMPORT AJOUTÉ
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext({});
 
 export function DataProvider({ children }) {
-  const { profile } = useAuth(); // <-- RÉCUPÉRATION DU PROFIL CONNECTÉ
+  const { profile } = useAuth();
   
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
@@ -16,7 +16,8 @@ export function DataProvider({ children }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [settings] = useState({
+  // 1. Ajout de setSettings ici
+  const [settings, setSettings] = useState({
     company: { name: 'SALAMA SAVA', address: 'Antananarivo', nif: '123 456 789', stat: '98765', bank: 'BMOI', phone: '+261 34', email: 'contact@salama.mg' },
     tvaRate: 20, delayDays: 15, remiseRate: 0, fefoEnabled: true
   });
@@ -28,9 +29,17 @@ export function DataProvider({ children }) {
     async function loadAllData() {
       setLoading(true);
       try {
+        // Charger les paramètres (settings)
+        const { data: settingsData } = await supabase.from('settings').select('data').eq('id', 1).single();
+        if (settingsData?.data) {
+          setSettings(settingsData.data);
+        }
+
+        // Emplacements
         const { data: locData } = await supabase.from('emplacements').select('*');
         if (locData) setLocations(locData);
 
+        // Produits avec lots et emplacement
         const { data: prodData } = await supabase.from('produits').select('*, lots(*), emplacement:emplacements(*)');
         if (prodData) {
           setProducts(prodData.map(p => ({
@@ -45,33 +54,38 @@ export function DataProvider({ children }) {
           })));
         }
 
+        // Clients
         const { data: clientData } = await supabase.from('clients').select('*');
         if (clientData) setClients(clientData.map(c => ({ ...c, name: c.nom, status: c.statut })));
 
+        // Fournisseurs
         const { data: supData } = await supabase.from('fournisseurs').select('*');
         if (supData) setSuppliers(supData.map(s => ({ ...s, name: s.nom, status: s.statut })));
 
+        // Ventes
         const { data: saleData } = await supabase.from('ventes').select('*, client:clients(nom, type), lignes:lignes_vente(*, produit:produits(nom))');
         if (saleData) {
           setSales(saleData.map(s => ({
             id: s.id, number: s.numero_facture, date: s.date_vente, client: s.client?.nom,
             clientType: s.client?.type, payment: s.type_paiement, status: s.statut,
             paid: s.montant_paye, echeance: s.echeance,
-            userName: s.user_name, // <-- RÉCUPÉRATION
+            userName: s.user_name,
             products: s.lignes.map(l => ({ productId: l.produit_id, name: l.produit?.nom, lot: l.lot_id, quantity: l.quantite, price: l.prix_unitaire, tva: l.tva }))
           })));
         }
 
+        // Achats
         const { data: purData } = await supabase.from('achats').select('*, fournisseur:fournisseurs(nom), lignes:lignes_achat(*, produit:produits(nom))');
         if (purData) {
           setPurchases(purData.map(p => ({
             id: p.id, number: p.numero_facture, date: p.date_achat, supplier: p.fournisseur?.nom,
             tvaRate: p.taux_tva, remiseRate: p.remise, status: p.statut,
-            userName: p.user_name, // <-- RÉCUPÉRATION
+            userName: p.user_name,
             products: p.lignes.map(l => ({ productId: l.produit_id, name: l.produit?.nom, quantity: l.quantite, price: l.prix_unitaire, expiry: l.date_expiration }))
           })));
         }
 
+        // Journal
         const { data: jData } = await supabase.from('journal').select('*').order('date_action', { ascending: false }).limit(50);
         if (jData) setJournal(jData.map(j => ({ id: j.id, date: j.date_action, type: j.type, title: j.titre, description: j.description })));
 
@@ -84,9 +98,37 @@ export function DataProvider({ children }) {
     loadAllData();
   }, []);
 
+  // Journal
   const logJournal = async (type, title, description) => {
     setJournal(prev => [{ id: Date.now(), date: new Date().toISOString(), type, title, description }, ...prev]);
     await supabase.from('journal').insert([{ type, titre: title, description }]);
+  };
+
+  // ==========================================
+  // PARAMÈTRES
+  // ==========================================
+  const updateSettings = async (newSettings) => {
+    // Mise à jour immédiate de l'état local
+    setSettings(newSettings);
+    
+    try {
+      // Sauvegarde dans Supabase
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ 
+          id: 1, 
+          data: newSettings,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      
+      logJournal('Paramètres', 'Paramètres modifiés', 'Configuration mise à jour');
+      return { success: true };
+    } catch (error) {
+      console.error("Erreur sauvegarde paramètres:", error);
+      return { success: false, error };
+    }
   };
 
   // ==========================================
@@ -287,7 +329,7 @@ export function DataProvider({ children }) {
   };
 
   // ==========================================
-  // VENTES (AVEC USER_NAME)
+  // VENTES
   // ==========================================
   const addSale = async (saleData) => {
     const { data: venteDb, error: venteErr } = await supabase.from('ventes').insert([{
@@ -298,28 +340,50 @@ export function DataProvider({ children }) {
       statut: saleData.status,
       montant_paye: saleData.paid,
       echeance: saleData.echeance,
-      user_name: profile?.name || 'Inconnu' // <-- AJOUT
+      user_name: profile?.name || 'Inconnu'
     }]).select().single();
 
     if (venteErr) { console.error(venteErr); return; }
 
     const lignes = saleData.products.map(p => ({
-      vente_id: venteDb.id, produit_id: p.productId, lot_id: p.lotId || null,
-      quantite: p.quantity, prix_unitaire: p.price, tva: p.tva
+      vente_id: venteDb.id,
+      produit_id: p.productId,
+      lot_id: p.lotId || null,
+      quantite: p.quantity,
+      prix_unitaire: p.price,
+      tva: p.tva
     }));
 
     const { error: lignesErr } = await supabase.from('lignes_vente').insert(lignes);
-    
-    if (!lignesErr) {
-      setSales(prev => [{ ...saleData, id: venteDb.id, userName: profile?.name }, ...prev]);
-      logJournal('Vente', 'Vente enregistrée', `${saleData.number} — ${saleData.client} par ${profile?.name || 'Inconnu'}`);
-      
-      const { data: prodData } = await supabase.from('produits').select('*, lots(*)');
-      if (prodData) setProducts(prev => prev.map(p => {
+    if (lignesErr) { console.error(lignesErr); return; }
+
+    const { data: saleDataUpdated } = await supabase
+      .from('ventes')
+      .select('*, client:clients(nom, type), lignes:lignes_vente(*, produit:produits(nom))')
+      .order('date_vente', { ascending: false });
+
+    if (saleDataUpdated) {
+      setSales(saleDataUpdated.map(s => ({
+        id: s.id, number: s.numero_facture, date: s.date_vente, client: s.client?.nom,
+        clientType: s.client?.type, payment: s.type_paiement, status: s.statut,
+        paid: s.montant_paye, echeance: s.echeance, userName: s.user_name,
+        products: s.lignes.map(l => ({ productId: l.produit_id, name: l.produit?.nom, lot: l.lot_id, quantity: l.quantite, price: l.prix_unitaire, tva: l.tva }))
+      })));
+    }
+
+    const { data: prodData } = await supabase.from('produits').select('*, lots(*)');
+    if (prodData) {
+      setProducts(prev => prev.map(p => {
         const updated = prodData.find(n => n.id === p.id);
-        return updated ? { ...p, stock: updated.stock, lots: updated.lots.map(l => ({ id: l.numero_lot, expiry: l.date_expiration, stock: l.quantite, _db_id: l.id })) } : p;
+        return updated ? { 
+          ...p, 
+          stock: updated.stock, 
+          lots: updated.lots.map(l => ({ id: l.numero_lot, expiry: l.date_expiration, stock: l.quantite, _db_id: l.id })) 
+        } : p;
       }));
     }
+
+    logJournal('Vente', 'Vente enregistrée', `${saleData.number} — ${saleData.client} par ${profile?.name || 'Inconnu'}`);
   };
 
   const deleteSale = async (id) => {
@@ -331,7 +395,7 @@ export function DataProvider({ children }) {
   };
 
   // ==========================================
-  // ACHATS (AVEC USER_NAME)
+  // ACHATS
   // ==========================================
   const addPurchase = async (purchaseData) => {
     const { data: achatDb, error: achatErr } = await supabase.from('achats').insert([{
@@ -341,27 +405,43 @@ export function DataProvider({ children }) {
       taux_tva: purchaseData.tvaRate,
       remise: purchaseData.remiseRate,
       statut: purchaseData.status,
-      user_name: profile?.name || 'Inconnu' // <-- AJOUT
+      user_name: profile?.name || 'Inconnu'
     }]).select().single();
 
     if (achatErr) { console.error(achatErr); return; }
 
     const lignes = purchaseData.products.map(p => ({
-      achat_id: achatDb.id, produit_id: p.productId, quantite: p.quantity, prix_unitaire: p.price
+      achat_id: achatDb.id,
+      produit_id: p.productId,
+      quantite: p.quantity,
+      prix_unitaire: p.price
     }));
 
     const { error: lignesErr } = await supabase.from('lignes_achat').insert(lignes);
+    if (lignesErr) { console.error(lignesErr); return; }
 
-    if (!lignesErr) {
-      setPurchases(prev => [{ ...purchaseData, id: achatDb.id, userName: profile?.name }, ...prev]);
-      logJournal('Achat', 'Achat enregistré', `${purchaseData.number} — ${purchaseData.supplier} par ${profile?.name || 'Inconnu'}`);
-      
-      const { data: prodData } = await supabase.from('produits').select('stock');
-      if (prodData) setProducts(prev => prev.map(p => {
+    const { data: purDataUpdated } = await supabase
+      .from('achats')
+      .select('*, fournisseur:fournisseurs(nom), lignes:lignes_achat(*, produit:produits(nom))')
+      .order('date_achat', { ascending: false });
+
+    if (purDataUpdated) {
+      setPurchases(purDataUpdated.map(p => ({
+        id: p.id, number: p.numero_facture, date: p.date_achat, supplier: p.fournisseur?.nom,
+        tvaRate: p.taux_tva, remiseRate: p.remise, status: p.statut, userName: p.user_name,
+        products: p.lignes.map(l => ({ productId: l.produit_id, name: l.produit?.nom, quantity: l.quantite, price: l.prix_unitaire, expiry: l.date_expiration }))
+      })));
+    }
+
+    const { data: prodData } = await supabase.from('produits').select('stock');
+    if (prodData) {
+      setProducts(prev => prev.map(p => {
         const updated = prodData.find(n => n.id === p.id);
         return updated ? { ...p, stock: updated.stock } : p;
       }));
     }
+
+    logJournal('Achat', 'Achat enregistré', `${purchaseData.number} — ${purchaseData.supplier} par ${profile?.name || 'Inconnu'}`);
   };
 
   const deletePurchase = async (id) => {
@@ -383,7 +463,8 @@ export function DataProvider({ children }) {
       addSale, deleteSale,
       addPurchase, deletePurchase,
       logJournal,
-      setProducts, setClients, setSuppliers, setSales, setPurchases, setJournal
+      setProducts, setClients, setSuppliers, setSales, setPurchases, setJournal,
+      setSettings, updateSettings // <-- Ajout de setSettings et updateSettings
     }}>
       {children}
     </DataContext.Provider>
