@@ -16,7 +16,6 @@ export function DataProvider({ children }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Ajout de setSettings ici
   const [settings, setSettings] = useState({
     company: { name: 'SALAMA SAVA', address: 'Antananarivo', nif: '123 456 789', stat: '98765', bank: 'BMOI', phone: '+261 34', email: 'contact@salama.mg' },
     tvaRate: 20, delayDays: 15, remiseRate: 0, fefoEnabled: true
@@ -46,6 +45,8 @@ export function DataProvider({ children }) {
             ...p,
             buyPrice: p.prix_achat,
             price: p.prix_vente,
+            priceGrossiste: p.prix_grossiste || p.prix_vente,
+            priceRevendeur: p.prix_revendeur || p.prix_vente,
             name: p.nom,
             rayon: p.emplacement?.rayon || '',
             allee: p.emplacement?.allee || '',
@@ -108,11 +109,9 @@ export function DataProvider({ children }) {
   // PARAMÈTRES
   // ==========================================
   const updateSettings = async (newSettings) => {
-    // Mise à jour immédiate de l'état local
     setSettings(newSettings);
     
     try {
-      // Sauvegarde dans Supabase
       const { error } = await supabase
         .from('settings')
         .upsert({ 
@@ -134,27 +133,108 @@ export function DataProvider({ children }) {
   // ==========================================
   // PRODUITS
   // ==========================================
-  const addProduct = async (data) => {
-    const { data: newDb, error } = await supabase.from('produits').insert([{
-      id: data.code, nom: data.name, type: data.type, conditionnement: data.conditionnement,
-      categorie: data.category, tva: data.tva, prix_achat: data.buyPrice, prix_vente: data.price, stock: data.stock
+  
+  // Fonction utilitaire pour trouver ou créer un emplacement
+  const getOrCreateLocation = async (rayon, allee, etagere) => {
+    if (!rayon && !allee && !etagere) return null;
+
+    const existingLoc = locations.find(l => 
+      l.rayon === rayon && l.allee === allee && l.etagere === etagere
+    );
+    
+    if (existingLoc) return existingLoc.id;
+
+    const { data: newLoc, error } = await supabase.from('emplacements').insert([{
+      rayon: rayon || '', allee: allee || '', etagere: etagere || ''
     }]).select().single();
 
-    if (!error && newDb) {
-      setProducts(prev => [...prev, { ...data, id: newDb.id, lots: [] }]);
+    if (!error && newLoc) {
+      setLocations(prev => [...prev, newLoc]);
+      return newLoc.id;
+    }
+    return null;
+  };
+
+  const addProduct = async (data) => {
+    try {
+      // 1. Gérer l'emplacement
+      const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere);
+
+      // 2. Insérer le produit
+      const { data: newDb, error } = await supabase.from('produits').insert([{
+        id: data.code, 
+        nom: data.name, 
+        type: data.type, 
+        conditionnement: data.conditionnement,
+        categorie: data.category, 
+        tva: data.tva, 
+        prix_achat: data.buyPrice, 
+        prix_vente: data.price, 
+        prix_grossiste: data.priceGrossiste, 
+        prix_revendeur: data.priceRevendeur,
+        stock: data.stock,
+        emplacement_id: emplacementId // <-- Ajout de l'ID emplacement
+      }]).select().single();
+
+      if (error) throw error;
+
+      // 3. Créer le lot initial si une date de péremption est fournie
+      let initialLots = [];
+      if (data.expiry && data.stock > 0) {
+        const { data: newLot } = await supabase.from('lots').insert([{
+          produit_id: newDb.id,
+          numero_lot: `LOT-${data.code}-${Date.now()}`,
+          quantite: data.stock,
+          date_expiration: data.expiry
+        }]).select().single();
+
+        if (newLot) {
+          initialLots = [{ id: newLot.numero_lot, expiry: newLot.date_expiration, stock: newLot.quantite, _db_id: newLot.id }];
+        }
+      }
+
+      // 4. Mise à jour de l'état local
+      setProducts(prev => [...prev, { 
+        ...data, 
+        id: newDb.id, 
+        emplacement_id: emplacementId,
+        lots: initialLots
+      }]);
+      
       logJournal('Produit', 'Nouveau produit', data.name);
+    } catch (error) {
+      console.error("Erreur addProduct:", error);
+      throw error;
     }
   };
 
   const updateProduct = async (id, data) => {
-    const { error } = await supabase.from('produits').update({
-      nom: data.name, type: data.type, conditionnement: data.conditionnement,
-      categorie: data.category, tva: data.tva, prix_achat: data.buyPrice, prix_vente: data.price, stock: data.stock
-    }).eq('id', id);
+    try {
+      // 1. Gérer l'emplacement
+      const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere);
 
-    if (!error) {
-      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+      // 2. Mettre à jour le produit
+      const { error } = await supabase.from('produits').update({
+        nom: data.name, 
+        type: data.type, 
+        conditionnement: data.conditionnement,
+        categorie: data.category, 
+        tva: data.tva, 
+        prix_achat: data.buyPrice, 
+        prix_vente: data.price, 
+        prix_grossiste: data.priceGrossiste, 
+        prix_revendeur: data.priceRevendeur,
+        stock: data.stock,
+        emplacement_id: emplacementId // <-- Ajout de l'ID emplacement
+      }).eq('id', id);
+
+      if (error) throw error;
+
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...data, emplacement_id: emplacementId } : p));
       logJournal('Produit', 'Produit modifié', data.name);
+    } catch (error) {
+      console.error("Erreur updateProduct:", error);
+      throw error;
     }
   };
 
@@ -464,7 +544,7 @@ export function DataProvider({ children }) {
       addPurchase, deletePurchase,
       logJournal,
       setProducts, setClients, setSuppliers, setSales, setPurchases, setJournal,
-      setSettings, updateSettings // <-- Ajout de setSettings et updateSettings
+      setSettings, updateSettings
     }}>
       {children}
     </DataContext.Provider>

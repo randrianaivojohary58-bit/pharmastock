@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Plus, FileText, Edit, Trash2, DollarSign, User } from 'lucide-react';
+import { Plus, FileText, Edit, Trash2, DollarSign, User, Receipt } from 'lucide-react'; // Ajout de Receipt
 import { useData } from '../context/DataContext';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import MiniStat from '../components/common/MiniStat';
 import SaleModal from '../components/modals/SaleModal';
 import InvoiceModal from '../components/modals/InvoiceModal';
+import TicketModal from '../components/modals/TicketModal'; // <-- NOUVEL IMPORT
 import ConfirmModal from '../components/common/ConfirmModal';
 import { formatMoney } from '../utils/format';
 import { formatDate } from '../utils/dates';
@@ -15,6 +16,7 @@ export default function Ventes() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [invoice, setInvoice] = useState(null);
+  const [ticket, setTicket] = useState(null); // <-- NOUVEL ETAT
   const [edit, setEdit] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
 
@@ -120,6 +122,10 @@ export default function Ventes() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-1">
+                          {/* BOUTON TICKET AJOUTÉ ICI */}
+                          <button onClick={() => setTicket(sale)} className="w-7 h-7 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 flex items-center justify-center" title="Ticket de caisse">
+                            <Receipt className="w-3 h-3" />
+                          </button>
                           <button onClick={() => setInvoice(sale)} className="w-7 h-7 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center justify-center" title="Facture">
                             <FileText className="w-3 h-3" />
                           </button>
@@ -142,6 +148,9 @@ export default function Ventes() {
 
       <SaleModal isOpen={modalOpen} onClose={() => setModalOpen(false)} sale={edit} />
       <InvoiceModal isOpen={!!invoice} onClose={() => setInvoice(null)} sale={invoice} />
+      {/* MODALE TICKET AJOUTÉE ICI */}
+      <TicketModal isOpen={!!ticket} onClose={() => setTicket(null)} sale={ticket} />
+      
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer la vente ?"

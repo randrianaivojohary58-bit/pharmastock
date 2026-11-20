@@ -60,10 +60,12 @@ export default function Produits() {
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Code</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Produit</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Type</th>
-                {/* 👇 NOUVELLE COLONNE CONDITIONNEMENT */}
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Cond.</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Prix achat</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Prix vente</th>
+                {/* 👇 NOUVELLES COLONNES PRIX */}
+                <th className="px-4 py-3 text-left font-bold text-gray-600">P. Grossiste</th>
+                <th className="px-4 py-3 text-left font-bold text-gray-600">P. Revendeur</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Stock</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Emplacement</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Péremption</th>
@@ -79,7 +81,6 @@ export default function Produits() {
                     <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{p.id}</td>
                     <td className="px-4 py-3"><strong>{p.name}</strong></td>
                     <td className="px-4 py-3">{p.type}</td>
-                    {/* 👇 NOUVELLE VALEUR CONDITIONNEMENT */}
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-semibold border border-emerald-100">
                         {p.conditionnement || '—'}
@@ -87,6 +88,9 @@ export default function Produits() {
                     </td>
                     <td className="px-4 py-3">{formatMoney(p.buyPrice)}</td>
                     <td className="px-4 py-3 font-bold">{formatMoney(p.price)}</td>
+                    {/* 👇 NOUVELLES VALEURS PRIX */}
+                    <td className="px-4 py-3 text-gray-600">{formatMoney(p.priceGrossiste || p.price)}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatMoney(p.priceRevendeur || p.price)}</td>
                     <td className="px-4 py-3"><strong className={p.stock < 5 ? 'text-orange-500' : ''}>{p.stock} ctn</strong></td>
                     <td className="px-4 py-3 text-emerald-700">{getEmplacement(p)}</td>
                     <td className={`px-4 py-3 ${st.color}`}>{nearest ? formatDate(nearest.expiry) : '-'}</td>

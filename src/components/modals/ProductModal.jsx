@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
-import CustomSelect from '../common/CustomSelect';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -14,7 +13,12 @@ export default function ProductModal({ isOpen, onClose, product }) {
 
   const [form, setForm] = useState({
     code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
-    category: '', tva: 20, buyPrice: 0, price: 0, stock: 0,
+    category: '', tva: 20, 
+    buyPrice: 0, 
+    price: 0, 
+    priceGrossiste: 0,
+    priceRevendeur: 0,
+    stock: 0,
     rayon: '', allee: '', etagere: '', expiry: ''
   });
 
@@ -24,23 +28,33 @@ export default function ProductModal({ isOpen, onClose, product }) {
         code: product.id, name: product.name, type: product.type,
         conditionnement: product.conditionnement || 'Boîte',
         category: product.category || '', tva: product.tva,
-        buyPrice: product.buyPrice, price: product.price, stock: product.stock,
+        buyPrice: product.buyPrice, 
+        price: product.price, 
+        priceGrossiste: product.priceGrossiste || product.price || 0,
+        priceRevendeur: product.priceRevendeur || product.price || 0,
+        stock: product.stock,
         rayon: product.rayon || '', allee: product.allee || '', etagere: product.etagere || '',
         expiry: product.lots?.[0]?.expiry || ''
       });
     } else {
       setForm({
         code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
-        category: '', tva: 20, buyPrice: 0, price: 0, stock: 0,
+        category: '', tva: 20, 
+        buyPrice: 0, 
+        price: 0, 
+        priceGrossiste: 0,
+        priceRevendeur: 0,
+        stock: 0,
         rayon: '', allee: '', etagere: '', expiry: ''
       });
     }
   }, [product, isOpen]);
 
+  // Récupérer la liste unique des noms de produits existants pour la datalist
   const productNames = [...new Set(products.map(p => p.name))].sort();
 
   const handleSave = async () => {
-    if (!form.code || !form.name) {
+    if (!form.code.trim() || !form.name.trim()) {
       showToast('Attention', 'Code et nom requis', 'error');
       return;
     }
@@ -80,14 +94,24 @@ export default function ProductModal({ isOpen, onClose, product }) {
           <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })}
             disabled={isEdit} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs disabled:bg-gray-50" />
         </div>
-        <CustomSelect
-          label="Nom * (recherche/saisie)"
-          options={productNames}
-          value={form.name}
-          onChange={(v) => setForm({ ...form, name: v })}
-          allowCreate
-          placeholder="Rechercher ou saisir..."
-        />
+        
+        {/* CHAMP NOM AVEC DATALIST */}
+        <div>
+          <label className="block text-xs font-medium mb-1.5">Nom * (choisir ou saisir)</label>
+          <input 
+            list="product-names"
+            value={form.name} 
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" 
+            placeholder="Rechercher ou saisir un nouveau nom..."
+          />
+          <datalist id="product-names">
+            {productNames.map(name => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </div>
+
         <div>
           <label className="block text-xs font-medium mb-1.5">Type *</label>
           <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -114,16 +138,29 @@ export default function ProductModal({ isOpen, onClose, product }) {
             <option value={0}>0%</option><option value={10}>10%</option><option value={20}>20%</option>
           </select>
         </div>
+        
+        {/* SECTION DES PRIX */}
         <div>
           <label className="block text-xs font-medium mb-1.5">Prix achat *</label>
           <input type="number" value={form.buyPrice} onChange={(e) => setForm({ ...form, buyPrice: Number(e.target.value) })}
             className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1.5">Prix vente *</label>
+          <label className="block text-xs font-medium mb-1.5">Prix vente (Détail) *</label>
           <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
             className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
         </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5">Prix Grossiste</label>
+          <input type="number" value={form.priceGrossiste} onChange={(e) => setForm({ ...form, priceGrossiste: Number(e.target.value) })}
+            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5">Prix Revendeur</label>
+          <input type="number" value={form.priceRevendeur} onChange={(e) => setForm({ ...form, priceRevendeur: Number(e.target.value) })}
+            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+        </div>
+
         <div className="col-span-2">
           <label className="block text-xs font-medium mb-1.5">Emplacement</label>
           <div className="flex gap-2 items-center">

@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ConfirmModal from '../common/ConfirmModal';
 import {
   LayoutDashboard, Package, Boxes, MapPin, ShoppingCart, DollarSign,
   Users, Building2, Warehouse, ClipboardList, CreditCard, ArrowLeftRight,
-  BarChart3, ScrollText, HelpCircle, Settings, X, LogOut, Save
+  BarChart3, ScrollText, HelpCircle, Settings, X, LogOut, Save,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const menuSections = [
@@ -46,13 +49,24 @@ const menuSections = [
   }
 ];
 
-export default function Sidebar({ isOpen, onClose }) {
+// On reçoit isCollapsed et setIsCollapsed en props
+export default function Sidebar({ isOpen, onClose, isCollapsed, setIsCollapsed }) {
   const { profile, signOut } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const canSee = (item) => {
     if (!item.roles) return true;
     return item.roles.includes(profile?.roleKey);
   };
+
+  const handleLogoutClick = () => setShowLogoutConfirm(true);
+  
+  const handleConfirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    await signOut();
+  };
+
+  const toggleSidebar = () => setIsCollapsed(!isCollapsed);
 
   return (
     <>
@@ -60,11 +74,15 @@ export default function Sidebar({ isOpen, onClose }) {
         <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={onClose} />
       )}
       
-      <aside className={`w-[270px] bg-[#0a1f1a] text-white fixed top-0 bottom-0 left-0 z-40 flex flex-col transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside 
+        className={`bg-[#0a1f1a] text-white fixed top-0 bottom-0 left-0 z-40 flex flex-col transition-all duration-300 
+          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} 
+          ${isCollapsed ? 'w-[80px]' : 'w-[270px]'}`}
+      >
         
-        {/* HEADER AVEC TON LOGO */}
-        <div className="h-20 flex items-center px-5 border-b border-white/10">
-          <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center mr-3 shadow-lg overflow-hidden">
+        {/* HEADER */}
+        <div className={`h-20 flex items-center border-b border-white/10 ${isCollapsed ? 'justify-center px-0' : 'px-5'}`}>
+          <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center mr-3 shadow-lg overflow-hidden shrink-0">
             <img 
               src="/logo.png" 
               alt="Salama Sava" 
@@ -72,36 +90,59 @@ export default function Sidebar({ isOpen, onClose }) {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>
-          <div className="flex flex-col">
-            <strong className="text-sm tracking-wider">SALAMA SAVA</strong>
-            <span className="text-emerald-300 text-[10px] tracking-widest mt-0.5">PHARMASTOCK</span>
-          </div>
+          
+          {!isCollapsed && (
+            <div className="flex flex-col whitespace-nowrap">
+              <strong className="text-sm tracking-wider">SALAMA SAVA</strong>
+              <span className="text-emerald-300 text-[10px] tracking-widest mt-0.5">PHARMASTOCK</span>
+            </div>
+          )}
+          
           <button onClick={onClose} className="ml-auto lg:hidden text-gray-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* BOUTON RÉDUIRE (Desktop) */}
+        <button 
+          onClick={toggleSidebar}
+          className="hidden lg:flex absolute -right-3 top-24 w-6 h-6 bg-emerald-500 text-white rounded-full items-center justify-center shadow-md hover:bg-emerald-400 transition-colors z-50 border-2 border-[#0a1f1a]"
+        >
+          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+
         {/* CARTE UTILISATEUR */}
-        <div className="mx-4 mt-4 p-3 bg-[#132f28] border border-emerald-500/20 rounded-xl flex items-center relative">
-          
-          <div>
-            <strong className="text-xs block">{profile?.name || 'Utilisateur'}</strong>
-            <span className="text-gray-400 text-[10px]">{profile?.role || 'Admin'}</span>
-          </div>
-          <span className="w-2 h-2 bg-emerald-400 rounded-full absolute right-3 top-4 shadow-[0_0_0_3px_rgba(52,211,153,0.2)]" />
+        <div className={`mx-4 mt-4 p-3 bg-[#132f28] border border-emerald-500/20 rounded-xl flex items-center relative ${isCollapsed ? 'justify-center' : ''}`}>
+          {!isCollapsed ? (
+            <>
+              <div className="whitespace-nowrap">
+                <strong className="text-xs block">{profile?.name || 'Utilisateur'}</strong>
+                <span className="text-gray-400 text-[10px]">{profile?.role || 'Admin'}</span>
+              </div>
+              <span className="w-2 h-2 bg-emerald-400 rounded-full absolute right-3 top-4 shadow-[0_0_0_3px_rgba(52,211,153,0.2)]" />
+            </>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+              {profile?.name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+          )}
         </div>
 
         {/* MENU */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide">
           {menuSections.map((section, si) => {
             const visibleItems = section.items.filter(canSee);
             if (visibleItems.length === 0) return null;
 
             return (
               <div key={si} className="mt-4">
-                <span className="block px-3 text-[9px] font-bold tracking-widest text-[#4a6b62] mb-2">
-                  {section.title}
-                </span>
+                {!isCollapsed && (
+                  <span className="block px-3 text-[9px] font-bold tracking-widest text-[#4a6b62] mb-2 whitespace-nowrap">
+                    {section.title}
+                  </span>
+                )}
+                {isCollapsed && <div className="h-4" />}
+
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -109,16 +150,19 @@ export default function Sidebar({ isOpen, onClose }) {
                       key={item.to}
                       to={item.to}
                       onClick={onClose}
+                      title={isCollapsed ? item.label : undefined}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 h-11 px-3 rounded-lg my-0.5 text-xs transition-colors ${
+                        `flex items-center rounded-lg my-1 transition-all group ${
+                          isCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'gap-3 h-11 px-3'
+                        } ${
                           isActive
                             ? 'bg-gradient-to-r from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/30'
                             : 'text-gray-400 hover:text-white hover:bg-emerald-500/10'
                         }`
                       }
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <Icon className={`shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-4 h-4'}`} />
+                      {!isCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
                     </NavLink>
                   );
                 })}
@@ -129,19 +173,36 @@ export default function Sidebar({ isOpen, onClose }) {
 
         {/* FOOTER */}
         <div className="p-4 border-t border-white/10 space-y-1">
-          <button className="flex items-center gap-2 w-full h-10 px-3 text-gray-400 hover:text-white hover:bg-emerald-500/10 rounded-lg text-xs transition-colors">
-            <Save className="w-4 h-4" />
-            <span>Sauvegarder</span>
-          </button>
-          <button
-            onClick={signOut}
-            className="flex items-center gap-2 w-full h-10 px-3 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg text-xs transition-colors"
+          <button 
+            title={isCollapsed ? "Sauvegarder" : undefined}
+            className={`flex items-center w-full rounded-lg text-xs transition-colors text-gray-400 hover:text-white hover:bg-emerald-500/10 ${
+              isCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'gap-2 h-10 px-3'
+            }`}
           >
-            <LogOut className="w-4 h-4" />
-            <span>Déconnexion</span>
+            <Save className={`shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-4 h-4'}`} />
+            {!isCollapsed && <span>Sauvegarder</span>}
+          </button>
+          
+          <button
+            onClick={handleLogoutClick}
+            title={isCollapsed ? "Déconnexion" : undefined}
+            className={`flex items-center w-full rounded-lg text-xs transition-colors text-gray-400 hover:text-red-400 hover:bg-red-500/10 ${
+              isCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'gap-2 h-10 px-3'
+            }`}
+          >
+            <LogOut className={`shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-4 h-4'}`} />
+            {!isCollapsed && <span>Déconnexion</span>}
           </button>
         </div>
       </aside>
+
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Déconnexion"
+        message="Voulez-vous vraiment vous déconnecter de l'application ?"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </>
   );
 }
