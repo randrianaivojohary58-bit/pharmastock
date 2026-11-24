@@ -1,6 +1,7 @@
 import { Star, AlertTriangle, Hourglass, ArrowRight } from 'lucide-react';
 import { formatMoney } from '../../utils/format';
 import { TODAY } from '../../utils/dates';
+import { saleTotal } from '../../utils/salesStats';
 import { useNavigate } from 'react-router-dom';
 
 export default function FideleAlerts({ sales, clients }) {
@@ -15,7 +16,7 @@ export default function FideleAlerts({ sales, clients }) {
       alerts.push({
         client: s.client,
         facture: s.number,
-        montant: s.products.reduce((a, p) => a + p.quantity * p.price * (1 + p.tva / 100), 0),
+        montant: saleTotal(s),
         daysLeft,
         fidele: client?.fidele || false
       });

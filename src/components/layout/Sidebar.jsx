@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Package, Boxes, MapPin, ShoppingCart, DollarSign,
   Users, Building2, Warehouse, ClipboardList, CreditCard, ArrowLeftRight,
   BarChart3, ScrollText, HelpCircle, Settings, X, LogOut, Save,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, MonitorPlay
 } from 'lucide-react';
 
 const menuSections = [
@@ -14,6 +14,7 @@ const menuSections = [
     title: 'PRINCIPAL',
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+      { to: '/caisse', icon: MonitorPlay, label: 'Espace Caisse', roles: ['admin', 'caissier'] },
       { to: '/produits', icon: Package, label: 'Produits', roles: ['admin', 'magasinier'] },
       { to: '/lots', icon: Boxes, label: 'Lots & Péremption', roles: ['admin', 'magasinier'] },
       { to: '/emplacements', icon: MapPin, label: 'Emplacements', roles: ['admin', 'magasinier'] }
@@ -23,8 +24,9 @@ const menuSections = [
     title: 'COMMERCE',
     items: [
       { to: '/achats', icon: ShoppingCart, label: 'Achats', roles: ['admin', 'magasinier'] },
-      { to: '/ventes', icon: DollarSign, label: 'Ventes', roles: ['admin', 'caissier'] },
-      { to: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'caissier'] },
+      { to: '/ventes', icon: DollarSign, label: 'Ventes', roles: ['admin', 'magasinier'] },
+      // 👇 AJOUT DE 'magasinier' ICI
+      { to: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'magasinier'] },
       { to: '/fournisseurs', icon: Building2, label: 'Fournisseurs', roles: ['admin', 'magasinier'] }
     ]
   },
@@ -49,7 +51,6 @@ const menuSections = [
   }
 ];
 
-// On reçoit isCollapsed et setIsCollapsed en props
 export default function Sidebar({ isOpen, onClose, isCollapsed, setIsCollapsed }) {
   const { profile, signOut } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -79,16 +80,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, setIsCollapsed }
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} 
           ${isCollapsed ? 'w-[80px]' : 'w-[270px]'}`}
       >
-        
         {/* HEADER */}
         <div className={`h-20 flex items-center border-b border-white/10 ${isCollapsed ? 'justify-center px-0' : 'px-5'}`}>
           <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center mr-3 shadow-lg overflow-hidden shrink-0">
-            <img 
-              src="/logo.png" 
-              alt="Salama Sava" 
-              className="w-full h-full object-contain p-1"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
+            <img src="/logo.png" alt="Salama Sava" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
           
           {!isCollapsed && (
@@ -103,7 +98,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, setIsCollapsed }
           </button>
         </div>
 
-        {/* BOUTON RÉDUIRE (Desktop) */}
+        {/* BOUTON RÉDUIRE */}
         <button 
           onClick={toggleSidebar}
           className="hidden lg:flex absolute -right-3 top-24 w-6 h-6 bg-emerald-500 text-white rounded-full items-center justify-center shadow-md hover:bg-emerald-400 transition-colors z-50 border-2 border-[#0a1f1a]"

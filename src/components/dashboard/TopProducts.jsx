@@ -12,7 +12,7 @@ export default function TopProducts({ sales }) {
         productSales[p.productId] = { name: p.name, qty: 0, total: 0 };
       }
       productSales[p.productId].qty += p.quantity;
-      productSales[p.productId].total += p.quantity * p.price;
+      productSales[p.productId].total += p.quantity * p.price * (1 - (Number(s.remiseRate) || 0) / 100);
     });
   });
 

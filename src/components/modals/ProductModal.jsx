@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { AlertCircle } from 'lucide-react';
 
-const TYPES = ['Comprimé', 'Sirop', 'Injectable', 'Suppositoire', 'Pommade', 'Gouttes', 'Consommables'];
+const TYPES = ['Comprimé', 'Sirop', 'Injectable', 'Suppositoire', 'Pommade', 'Gouttes', 'Consommables', 'Autre'];
 const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoule', 'Pot', 'Blister', 'Étui'];
 
 export default function ProductModal({ isOpen, onClose, product }) {
@@ -13,14 +14,12 @@ export default function ProductModal({ isOpen, onClose, product }) {
 
   const [form, setForm] = useState({
     code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
-    category: '', tva: 20, 
-    buyPrice: 0, 
-    price: 0, 
-    priceGrossiste: 0,
-    priceRevendeur: 0,
-    stock: 0,
-    rayon: '', allee: '', etagere: '', expiry: ''
+    category: '', tva: 20, buyPrice: 0, price: 0, priceGrossiste: 0, priceRevendeur: 0,
+    stock: 0, rayon: '', allee: '', etagere: '', expiry: ''
   });
+
+  // Vérifier si le code saisi correspond à un produit existant
+  const isExistingProduct = !isEdit && products.some(p => p.id === form.code);
 
   useEffect(() => {
     if (product) {
@@ -28,8 +27,7 @@ export default function ProductModal({ isOpen, onClose, product }) {
         code: product.id, name: product.name, type: product.type,
         conditionnement: product.conditionnement || 'Boîte',
         category: product.category || '', tva: product.tva,
-        buyPrice: product.buyPrice, 
-        price: product.price, 
+        buyPrice: product.buyPrice, price: product.price,
         priceGrossiste: product.priceGrossiste || product.price || 0,
         priceRevendeur: product.priceRevendeur || product.price || 0,
         stock: product.stock,
@@ -39,18 +37,12 @@ export default function ProductModal({ isOpen, onClose, product }) {
     } else {
       setForm({
         code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
-        category: '', tva: 20, 
-        buyPrice: 0, 
-        price: 0, 
-        priceGrossiste: 0,
-        priceRevendeur: 0,
-        stock: 0,
-        rayon: '', allee: '', etagere: '', expiry: ''
+        category: '', tva: 20, buyPrice: 0, price: 0, priceGrossiste: 0, priceRevendeur: 0,
+        stock: 0, rayon: '', allee: '', etagere: '', expiry: ''
       });
     }
   }, [product, isOpen]);
 
-  // Récupérer la liste unique des noms de produits existants pour la datalist
   const productNames = [...new Set(products.map(p => p.name))].sort();
 
   const handleSave = async () => {
@@ -59,17 +51,19 @@ export default function ProductModal({ isOpen, onClose, product }) {
       return;
     }
 
+    // Si c'est un produit existant (nouveau lot), vérifier qu'il y a une date et un stock
+    if (isExistingProduct && (!form.expiry || form.stock <= 0)) {
+      showToast('Attention', 'Pour ajouter un nouveau lot, saisissez une date de péremption et une quantité > 0.', 'error');
+      return;
+    }
+
     try {
       if (isEdit) {
         await updateProduct(product.id, form);
         showToast('Succès', 'Produit modifié');
       } else {
-        if (products.some(p => p.id === form.code)) {
-          showToast('Attention', 'Code déjà utilisé', 'error');
-          return;
-        }
         await addProduct(form);
-        showToast('Succès', 'Produit ajouté');
+        showToast('Succès', isExistingProduct ? 'Nouveau lot ajouté' : 'Produit ajouté');
       }
       onClose();
     } catch (err) {
@@ -80,7 +74,7 @@ export default function ProductModal({ isOpen, onClose, product }) {
   return (
     <Modal
       isOpen={isOpen} onClose={onClose}
-      title={isEdit ? 'Modifier le produit' : 'Ajouter un produit'} label="PRODUIT"
+      title={isEdit ? 'Modifier le produit' : 'Ajouter un produit / lot'} label="PRODUIT"
       footer={
         <>
           <button onClick={onClose} className="px-4 py-2 border border-gray-200 rounded-lg text-xs">Annuler</button>
@@ -89,13 +83,26 @@ export default function ProductModal({ isOpen, onClose, product }) {
       }
     >
       <div className="grid grid-cols-2 gap-4">
+        
+        {/* CHAMP CODE AVEC ALERTE */}
         <div>
           <label className="block text-xs font-medium mb-1.5">Code *</label>
-          <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })}
-            disabled={isEdit} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs disabled:bg-gray-50" />
+          <input 
+            value={form.code} 
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            disabled={isEdit} 
+            className={`w-full h-10 px-3 border rounded-lg text-xs disabled:bg-gray-50 ${
+              isExistingProduct ? 'border-orange-400 bg-orange-50' : 'border-gray-200'
+            }`} 
+          />
+          {isExistingProduct && (
+            <p className="text-[10px] text-orange-600 font-bold mt-1 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> Ce code existe déjà. Un nouveau lot sera ajouté.
+            </p>
+          )}
         </div>
         
-        {/* CHAMP NOM AVEC DATALIST */}
+        {/* CHAMP NOM */}
         <div>
           <label className="block text-xs font-medium mb-1.5">Nom * (choisir ou saisir)</label>
           <input 
@@ -175,16 +182,27 @@ export default function ProductModal({ isOpen, onClose, product }) {
             </span>
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium mb-1.5">Stock</label>
-          <input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })}
-            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+
+        {/* SECTION STOCK ET PÉREMPTION (Mise en avant) */}
+        <div className="col-span-2 mt-2 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+          <h4 className="text-xs font-bold text-emerald-800 mb-3">
+            {isExistingProduct ? "Détails du nouveau lot" : "Premier lot / Stock initial"}
+          </h4>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Quantité (stock) *</label>
+              <input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })}
+                className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Date de péremption *</label>
+              <input type="date" value={form.expiry} onChange={(e) => setForm({ ...form, expiry: e.target.value })}
+                className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium mb-1.5">Date péremption</label>
-          <input type="date" value={form.expiry} onChange={(e) => setForm({ ...form, expiry: e.target.value })}
-            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
-        </div>
+
       </div>
     </Modal>
   );

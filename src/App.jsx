@@ -1,10 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
 import MainLayout from './components/layout/MainLayout';
 import PublicLayout from './components/layout/PublicLayout';
-import RoleGuard from './components/layout/RoleGuard'; // <-- NOUVEAU
+import RoleGuard from './components/layout/RoleGuard';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Produits from './pages/Produits';
@@ -12,6 +13,7 @@ import Lots from './pages/Lots';
 import Emplacements from './pages/Emplacements';
 import Achats from './pages/Achats';
 import Ventes from './pages/Ventes';
+import Caisse from './pages/Caisse';
 import Clients from './pages/Clients';
 import Fournisseurs from './pages/Fournisseurs';
 import Stock from './pages/Stock';
@@ -23,6 +25,15 @@ import Journal from './pages/Journal';
 import Aide from './pages/Aide';
 import Parametres from './pages/Parametres';
 import Utilisateurs from './pages/Utilisateurs';
+
+// Mémorise la page courante pour la retrouver après un rafraîchissement (F5)
+function PersistLocation() {
+  const location = useLocation();
+  useEffect(() => {
+    sessionStorage.setItem('lastRoute', location.pathname);
+  }, [location]);
+  return null;
+}
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -37,15 +48,12 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Publiques */}
       <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
       <Route path="/aide" element={<PublicLayout><Aide /></PublicLayout>} />
 
-      {/* Privées avec MainLayout */}
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" />} />
-        
-        {/* Tous les rôles */}
+
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="stock" element={<Stock />} />
         <Route path="mouvements" element={<Mouvements />} />
@@ -57,14 +65,18 @@ function AppRoutes() {
         <Route path="achats" element={<RoleGuard roles={['admin', 'magasinier']}><Achats /></RoleGuard>} />
         <Route path="fournisseurs" element={<RoleGuard roles={['admin', 'magasinier']}><Fournisseurs /></RoleGuard>} />
         <Route path="inventaires" element={<RoleGuard roles={['admin', 'magasinier']}><Inventaires /></RoleGuard>} />
-     
 
-        {/* Admin + Caissier */}
-        <Route path="ventes" element={<RoleGuard roles={['admin', 'caissier']}><Ventes /></RoleGuard>} />
-        <Route path="clients" element={<RoleGuard roles={['admin', 'caissier']}><Clients /></RoleGuard>} />
+        {/* Ventes : Accessible à tous */}
+        <Route path="ventes" element={<RoleGuard roles={['admin', 'magasinier', 'caissier']}><Ventes /></RoleGuard>} />
+
+        {/* Clients : Admin, Magasinier et Caissier */}
+        <Route path="clients" element={<RoleGuard roles={['admin', 'magasinier', 'caissier']}><Clients /></RoleGuard>} />
+
+        {/* Caisse : Uniquement Admin et Caissier */}
+        <Route path="caisse" element={<RoleGuard roles={['admin', 'caissier']}><Caisse /></RoleGuard>} />
+
         <Route path="creances" element={<RoleGuard roles={['admin', 'caissier']}><Creances /></RoleGuard>} />
 
-        {/* Admin uniquement */}
         <Route path="rapports" element={<RoleGuard roles={['admin']}><Rapports /></RoleGuard>} />
         <Route path="journal" element={<RoleGuard roles={['admin']}><Journal /></RoleGuard>} />
         <Route path="parametres" element={<RoleGuard roles={['admin']}><Parametres /></RoleGuard>} />
@@ -76,9 +88,18 @@ function AppRoutes() {
   );
 }
 
+function getInitialRoute() {
+  try {
+    return sessionStorage.getItem('lastRoute') || '/dashboard';
+  } catch {
+    return '/dashboard';
+  }
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <MemoryRouter initialEntries={[getInitialRoute()]}>
+      <PersistLocation />
       <AuthProvider>
         <ToastProvider>
           <DataProvider>
@@ -86,6 +107,6 @@ export default function App() {
           </DataProvider>
         </ToastProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </MemoryRouter>
   );
 }

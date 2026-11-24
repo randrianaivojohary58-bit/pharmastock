@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { formatMoney } from '../../utils/format';
+import { saleTotal } from '../../utils/salesStats';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
@@ -39,7 +40,7 @@ export default function SalesChart({ sales }) {
         const saleDate = new Date(sale.date).toDateString();
         const dayData = data.find(d => d.fullDate === saleDate);
         if (dayData) {
-          const totalSale = sale.products.reduce((a, p) => a + p.quantity * p.price * (1 + (p.tva || 0) / 100), 0);
+          const totalSale = saleTotal(sale);
           dayData.ca += totalSale;
         }
       });
@@ -61,7 +62,7 @@ export default function SalesChart({ sales }) {
         const saleDate = new Date(sale.date);
         const monthData = data.find(d => d.month === saleDate.getMonth() && d.year === saleDate.getFullYear());
         if (monthData) {
-          const totalSale = sale.products.reduce((a, p) => a + p.quantity * p.price * (1 + (p.tva || 0) / 100), 0);
+          const totalSale = saleTotal(sale);
           monthData.ca += totalSale;
         }
       });
@@ -72,7 +73,7 @@ export default function SalesChart({ sales }) {
       sales.forEach(sale => {
         const year = new Date(sale.date).getFullYear();
         if (!years[year]) years[year] = 0;
-        const totalSale = sale.products.reduce((a, p) => a + p.quantity * p.price * (1 + (p.tva || 0) / 100), 0);
+        const totalSale = saleTotal(sale);
         years[year] += totalSale;
       });
 

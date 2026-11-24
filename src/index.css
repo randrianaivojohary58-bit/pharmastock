@@ -5,3 +5,10 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Inter', sans-serif; background: #f4f9f6; color: #172033; }
+img.logo {
+  width: 10mm;
+  height: 10mm;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 2px;
+}

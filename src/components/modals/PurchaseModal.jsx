@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import CustomSelect from '../common/CustomSelect';
-import AiScanner from '../common/AiScanner'; // <-- IMPORT AJOUTÉ
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { formatMoney } from '../../utils/format';
 
+const TYPES = ['Comprimé', 'Sirop', 'Injectable', 'Suppositoire', 'Pommade', 'Gouttes', 'Consommables', 'Autre'];
+const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoule', 'Pot', 'Blister', 'Étui'];
+
+const newLine = () => ({ productName: '', quantity: 1, price: 0, type: 'Comprimé', conditionnement: 'Boîte' });
+
 export default function PurchaseModal({ isOpen, onClose, purchase }) {
-  const { products, suppliers, addPurchase } = useData();
+  const { products, suppliers, addPurchase, addProduct } = useData();
   const { showToast } = useToast();
   const isEdit = !!purchase;
 
@@ -16,69 +20,42 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
     tvaRate: 20, remiseRate: 0, lines: []
   });
 
-  const supplierOptions = suppliers.map(s => s.name);
+  const productNames = products.map(p => p.name).sort();
+
+  // Un produit est "nouveau" si son nom n'existe pas encore dans le catalogue
+  const isNewProduct = (name) =>
+    !!name && !!name.trim() &&
+    !products.some(p => p.name.toLowerCase() === name.trim().toLowerCase());
 
   useEffect(() => {
-    if (isOpen) {
-      if (purchase) {
-        setForm({
-          supplier: purchase.supplier, date: purchase.date, number: purchase.number,
-          status: purchase.status, tvaRate: purchase.tvaRate, remiseRate: purchase.remiseRate,
-          lines: purchase.products.map(p => ({ 
-            productId: p.productId, 
-            quantity: p.quantity, 
-            price: p.price 
-          }))
-        });
-      } else {
-        setForm({ 
-          supplier: '', 
-          date: new Date().toISOString().split('T')[0], 
-          number: '', 
-          status: 'Reçu', 
-          tvaRate: 20, 
-          remiseRate: 0, 
-          lines: [{ productId: '', quantity: 1, price: 0 }] 
-        });
-      }
+    if (purchase) {
+      setForm({
+        supplier: purchase.supplier, date: purchase.date, number: purchase.number,
+        status: purchase.status, tvaRate: purchase.tvaRate, remiseRate: purchase.remiseRate,
+        lines: purchase.products.map(p => ({
+          productName: p.name,
+          quantity: p.quantity,
+          price: p.price,
+          type: 'Comprimé',
+          conditionnement: 'Boîte'
+        }))
+      });
+    } else {
+      setForm({ 
+        supplier: '', 
+        date: new Date().toISOString().split('T')[0], 
+        number: '', 
+        status: 'Reçu', 
+        tvaRate: 20, 
+        remiseRate: 0, 
+        lines: [newLine()]
+      });
     }
   }, [purchase, isOpen]);
 
-  // --- NOUVELLE FONCTION POUR L'IA ---
-  const handleAiData = (data) => {
-    // 1. Chercher le fournisseur
-    const matchedSupplier = suppliers.find(s => 
-      s.name.toLowerCase().includes((data.supplier || '').toLowerCase()) ||
-      (data.supplier || '').toLowerCase().includes(s.name.toLowerCase())
-    );
-
-    // 2. Chercher les produits
-    const mappedLines = (data.products || []).map(aiProduct => {
-      const matchedProduct = products.find(p => 
-        p.name.toLowerCase().includes((aiProduct.name || '').toLowerCase()) ||
-        (aiProduct.name || '').toLowerCase().includes(p.name.toLowerCase())
-      );
-      return {
-        productId: matchedProduct ? matchedProduct.id : '',
-        quantity: aiProduct.quantity || 1,
-        price: aiProduct.price || 0
-      };
-    });
-
-    // 3. Mettre à jour le formulaire
-    setForm({
-      supplier: matchedSupplier ? matchedSupplier.name : (data.supplier || ''),
-      date: data.date || new Date().toISOString().split('T')[0],
-      number: data.number || '',
-      status: 'Reçu',
-      tvaRate: data.tvaRate || 20,
-      remiseRate: data.remiseRate || 0,
-      lines: mappedLines.length > 0 ? mappedLines : [{ productId: '', quantity: 1, price: 0 }]
-    });
-  };
-
-  const addLine = () => setForm({ ...form, lines: [...form.lines, { productId: '', quantity: 1, price: 0 }] });
+  const addLine = () => setForm({ ...form, lines: [...form.lines, newLine()] });
   const removeLine = (i) => form.lines.length > 1 && setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
+  
   const updateLine = (i, field, value) => {
     const newLines = [...form.lines];
     newLines[i] = { ...newLines[i], [field]: value };
@@ -93,24 +70,62 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
 
   const handleSave = async () => {
     if (!form.supplier || !form.number) { showToast('Attention', 'Fournisseur et N° facture requis', 'error'); return; }
-    const validLines = form.lines.filter(l => l.productId && l.quantity > 0 && l.price > 0);
+    const validLines = form.lines.filter(l => l.productName && l.quantity > 0 && l.price > 0);
     if (!validLines.length) { showToast('Attention', 'Ajoutez au moins un produit avec prix', 'error'); return; }
 
     const supplierObj = suppliers.find(s => s.name === form.supplier);
     if (!supplierObj) { showToast('Erreur', 'Fournisseur introuvable', 'error'); return; }
 
-    const purchaseProducts = validLines.map(l => {
-      const product = products.find(p => p.id === l.productId);
-      return { productId: l.productId, name: product?.name, quantity: l.quantity, price: l.price, expiry: '2028-12-31' };
-    });
-
-    const purchaseData = {
-      number: form.number, date: form.date, supplier: form.supplier,
-      supplierId: supplierObj.id,
-      tvaRate: form.tvaRate, remiseRate: form.remiseRate, status: form.status, products: purchaseProducts
-    };
-
+    const purchaseProducts = [];
+    
     try {
+      for (const line of validLines) {
+        // Chercher le produit par son nom
+        let product = products.find(p => p.name.toLowerCase() === line.productName.trim().toLowerCase());
+        
+        if (!product) {
+          // Si le produit n'existe pas, on le crée
+          const newCode = `NEW-${Date.now()}-${line.productName.trim().substring(0, 3).toUpperCase()}`;
+          
+          // addProduct retourne maintenant l'objet créé
+          const createdProduct = await addProduct({
+            code: newCode,
+            name: line.productName.trim(),
+            type: line.type || 'Autre',                  // type choisi dans la ligne d'achat
+            conditionnement: line.conditionnement || 'Boîte',
+            category: '',
+            tva: form.tvaRate,
+            buyPrice: line.price,
+            price: line.price * 1.2, 
+            priceGrossiste: line.price * 1.1,
+            priceRevendeur: line.price * 1.15,
+            stock: 0, 
+            rayon: '', allee: '', etagere: '', expiry: ''
+          });
+
+          product = createdProduct;
+        }
+
+        // Sécurité anti-crash si product est toujours undefined
+        if (!product) {
+          throw new Error(`Impossible de trouver ou créer le produit: ${line.productName}`);
+        }
+
+        purchaseProducts.push({
+          productId: product.id,
+          name: product.name,
+          quantity: line.quantity,
+          price: line.price,
+          expiry: '2028-12-31'
+        });
+      }
+
+      const purchaseData = {
+        number: form.number, date: form.date, supplier: form.supplier,
+        supplierId: supplierObj.id,
+        tvaRate: form.tvaRate, remiseRate: form.remiseRate, status: form.status, products: purchaseProducts
+      };
+
       if (isEdit) {
         showToast('Info', 'Modification non implémentée');
       } else {
@@ -134,19 +149,15 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
     >
       <div className="space-y-5">
         
-        {/* --- BOUTON SCANNER AJOUTÉ ICI --- */}
-        {!isEdit && (
-          <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-            <div>
-              <p className="text-xs font-bold text-indigo-900">Remplissage automatique</p>
-              <p className="text-[10px] text-indigo-600">Scannez une facture pour remplir le formulaire</p>
-            </div>
-            <AiScanner onDataExtracted={handleAiData} />
+        <div className="flex justify-between items-center bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+          <div>
+            <p className="text-xs font-bold text-indigo-900">Remplissage automatique</p>
+            <p className="text-[10px] text-indigo-600">Scannez une facture pour remplir le formulaire</p>
           </div>
-        )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <CustomSelect label="Fournisseur *" options={supplierOptions} value={form.supplier} onChange={(v) => setForm({ ...form, supplier: v })} placeholder="Rechercher fournisseur..." />
+          <CustomSelect label="Fournisseur *" options={suppliers.map(s => s.name)} value={form.supplier} onChange={(v) => setForm({ ...form, supplier: v })} placeholder="Rechercher fournisseur..." />
           <div>
             <label className="block text-xs font-medium mb-1.5">Date facture *</label>
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
@@ -172,10 +183,18 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
             {form.lines.map((line, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
-                  <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className={`w-full h-9 px-2 border rounded-lg text-xs ${!line.productId ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
-                    <option value="">Sélectionner</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  <input 
+                    list="product-names"
+                    value={line.productName || ''} 
+                    onChange={(e) => updateLine(i, 'productName', e.target.value)} 
+                    placeholder="Rechercher ou saisir un nouveau produit..."
+                    className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs" 
+                  />
+                  <datalist id="product-names">
+                    {productNames.map(name => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div className="col-span-2">
                   <input type="number" min={1} value={line.quantity} onChange={(e) => updateLine(i, 'quantity', Number(e.target.value))} placeholder="Qté" className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs" />
@@ -185,6 +204,26 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
                 </div>
                 <div className="col-span-1 text-xs font-bold text-emerald-700">{formatMoney((line.quantity || 0) * (line.price || 0))}</div>
                 <button onClick={() => removeLine(i)} className="col-span-1 h-9 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100">×</button>
+
+                {isNewProduct(line.productName) && (
+                  <div className="col-span-12 flex flex-wrap items-center gap-2 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                    <span className="text-[10px] font-bold text-orange-700">Nouveau produit :</span>
+                    <select
+                      value={line.type || 'Comprimé'}
+                      onChange={(e) => updateLine(i, 'type', e.target.value)}
+                      className="h-8 px-2 border border-orange-200 rounded-lg text-xs bg-white"
+                    >
+                      {TYPES.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                    <select
+                      value={line.conditionnement || 'Boîte'}
+                      onChange={(e) => updateLine(i, 'conditionnement', e.target.value)}
+                      className="h-8 px-2 border border-orange-200 rounded-lg text-xs bg-white"
+                    >
+                      {CONDS.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             ))}
           </div>

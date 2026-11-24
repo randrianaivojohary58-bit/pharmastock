@@ -1,56 +1,65 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, ClipboardList } from 'lucide-react';
+import { useState } from 'react';
+import { useData } from '../context/DataContext';
 import PageHeader from '../components/common/PageHeader';
 import ConfirmModal from '../components/common/ConfirmModal';
+import { Plus, Trash2, ClipboardList } from 'lucide-react';
 import { formatDate } from '../utils/dates';
 import { useToast } from '../context/ToastContext';
 
 export default function Inventaires() {
+  const { products, inventories, addInventory, deleteInventory } = useData();
   const { showToast } = useToast();
-  const [inventories, setInventories] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
-  // Charger depuis localStorage au démarrage
-  useEffect(() => {
-    const saved = localStorage.getItem('pharmastock_inventaires');
-    if (saved) {
-      try {
-        setInventories(JSON.parse(saved));
-      } catch (e) {
-        console.error("Erreur de lecture localStorage", e);
-      }
+  // Formulaire de nouvel inventaire
+  const [form, setForm] = useState({
+    productId: '',
+    theoretical: 0,
+    physical: 0,
+  });
+
+  // Quand on change de produit, on met à jour le stock théorique
+  const handleProductChange = (productId) => {
+    const product = products.find(p => p.id === productId);
+    setForm({
+      ...form,
+      productId,
+      theoretical: product?.stock || 0,
+      physical: product?.stock || 0 // Par défaut, on suppose que le physique = théorique
+    });
+  };
+
+  const handleSave = async () => {
+    if (!form.productId) {
+      showToast('Attention', 'Sélectionnez un produit', 'error');
+      return;
     }
-  }, []);
 
-  // Sauvegarder dans localStorage à chaque modification
-  const saveToLocal = (newData) => {
-    setInventories(newData);
-    localStorage.setItem('pharmastock_inventaires', JSON.stringify(newData));
-  };
+    const reference = `INV-${new Date().getFullYear()}-${String(inventories.length + 1).padStart(3, '0')}`;
 
-  const handleNew = () => {
-    const ref = `INV-2026-${String(inventories.length + 10).padStart(3, '0')}`;
-    const newEntry = {
-      id: Date.now(),
-      ref,
+    await addInventory({
+      reference,
       date: new Date().toISOString().split('T')[0],
-      warehouse: 'Dépôt principal',
-      theoretical: 1068,
-      physical: 1068,
-      gap: 0,
-      status: 'En cours'
-    };
-    saveToLocal([newEntry, ...inventories]);
-    showToast('Succès', 'Inventaire créé');
+      productId: form.productId,
+      theoretical: form.theoretical,
+      physical: form.physical
+    });
+
+    showToast('Succès', 'Inventaire enregistré');
+    setModalOpen(false);
+    setForm({ productId: '', theoretical: 0, physical: 0 });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      saveToLocal(inventories.filter(i => i.id !== deleteId));
+      await deleteInventory(deleteId);
       showToast('Succès', 'Inventaire supprimé');
       setDeleteId(null);
     }
   };
+
+  const gap = form.physical - form.theoretical;
 
   return (
     <div>
@@ -58,7 +67,7 @@ export default function Inventaires() {
         title="Inventaires"
         subtitle="Contrôle physique des stocks"
         action={
-          <button onClick={handleNew}
+          <button onClick={() => setModalOpen(true)}
             className="h-10 px-4 bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-2 hover:bg-emerald-700">
             <Plus className="w-4 h-4" /> Nouvel inventaire
           </button>
@@ -72,11 +81,11 @@ export default function Inventaires() {
               <tr>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Référence</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Date</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Dépôt</th>
+                <th className="px-4 py-3 text-left font-bold text-gray-600">Produit</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Théorique</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Physique</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Écart</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Statut</th>
+                <th className="px-4 py-3 text-left font-bold text-gray-600">Utilisateur</th>
                 <th className="px-4 py-3 text-center font-bold text-gray-600">Actions</th>
               </tr>
             </thead>
@@ -91,17 +100,15 @@ export default function Inventaires() {
               ) : (
                 inventories.map(i => (
                   <tr key={i.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{i.ref}</td>
-                    <td className="px-4 py-3">{formatDate(i.date)}</td>
-                    <td className="px-4 py-3"><strong>{i.warehouse}</strong></td>
-                    <td className="px-4 py-3">{i.theoretical}</td>
-                    <td className="px-4 py-3">{i.physical}</td>
+                    <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{i.reference}</td>
+                    <td className="px-4 py-3">{formatDate(i.date_inventaire)}</td>
+                    <td className="px-4 py-3"><strong>{i.produit?.nom || 'Produit supprimé'}</strong></td>
+                    <td className="px-4 py-3">{i.stock_theorique}</td>
+                    <td className="px-4 py-3">{i.stock_physique}</td>
                     <td className={`px-4 py-3 font-bold ${
-                      i.gap < 0 ? 'text-red-600' : i.gap > 0 ? 'text-emerald-600' : ''
-                    }`}>{i.gap > 0 ? '+' : ''}{i.gap}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">{i.status}</span>
-                    </td>
+                      i.ecart < 0 ? 'text-red-600' : i.ecart > 0 ? 'text-emerald-600' : 'text-gray-500'
+                    }`}>{i.ecart > 0 ? '+' : ''}{i.ecart}</td>
+                    <td className="px-4 py-3">{i.user_name || 'Inconnu'}</td>
                     <td className="px-4 py-3">
                       <button onClick={() => setDeleteId(i.id)}
                         className="w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center justify-center mx-auto">
@@ -115,6 +122,55 @@ export default function Inventaires() {
           </table>
         </div>
       </div>
+
+      {/* MODALE NOUVEL INVENTAIRE */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold mb-4">Nouvel Inventaire</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1">Produit *</label>
+                <select 
+                  value={form.productId} 
+                  onChange={(e) => handleProductChange(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs"
+                >
+                  <option value="">Sélectionner un produit</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Stock Théorique</label>
+                  <input type="number" value={form.theoretical} disabled className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs bg-gray-50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Stock Physique *</label>
+                  <input type="number" value={form.physical} onChange={(e) => setForm({ ...form, physical: Number(e.target.value) })} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
+                </div>
+              </div>
+
+              {form.productId && (
+                <div className={`p-3 rounded-lg text-xs font-bold text-center ${
+                  gap < 0 ? 'bg-red-50 text-red-700' : gap > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-600'
+                }`}>
+                  Écart : {gap > 0 ? '+' : ''}{gap} carton(s)
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setModalOpen(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-xs">Annuler</button>
+              <button onClick={handleSave} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs">Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal
         isOpen={!!deleteId}

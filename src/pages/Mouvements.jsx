@@ -9,27 +9,35 @@ export default function Mouvements() {
   const [search, setSearch] = useState('');
 
   const movements = [];
+  
+  // ENTRÉES (Achats)
   purchases.forEach(p => {
     p.products.forEach(prod => {
       movements.push({
         date: p.date, type: 'Entrée', product: prod.name,
-        lot: `LOT-${p.number}-${prod.productId}`, qty: prod.quantity, ref: p.number
+        lot: `LOT-${p.number}-${prod.productId}`, // Le lot pour les achats est généré
+        qty: prod.quantity, ref: p.number
       });
     });
   });
+  
+  // SORTIES (Ventes)
   sales.forEach(s => {
     s.products.forEach(prod => {
       movements.push({
         date: s.date, type: 'Sortie', product: prod.name,
-        lot: '—', qty: -prod.quantity, ref: s.number
+        lot: prod.lot || '—', // <-- CORRECTION : On utilise le lot de la vente
+        qty: -prod.quantity, ref: s.number
       });
     });
   });
+  
   movements.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const filtered = movements.filter(m =>
     m.product.toLowerCase().includes(search.toLowerCase()) ||
-    m.ref.toLowerCase().includes(search.toLowerCase())
+    m.ref.toLowerCase().includes(search.toLowerCase()) ||
+    (m.lot || '').toLowerCase().includes(search.toLowerCase()) // <-- Ajout de la recherche par lot
   );
 
   return (
@@ -37,7 +45,7 @@ export default function Mouvements() {
       <PageHeader title="Mouvements" subtitle="Historique des entrées et sorties" />
 
       <div className="mb-4">
-        <SearchBar value={search} onChange={setSearch} placeholder="Rechercher un mouvement..." />
+        <SearchBar value={search} onChange={setSearch} placeholder="Rechercher un mouvement (produit, référence, lot...)" />
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -65,7 +73,7 @@ export default function Mouvements() {
                       }`}>{isIn ? 'Entrée' : 'Sortie'}</span>
                     </td>
                     <td className="px-4 py-3"><strong>{m.product}</strong></td>
-                    <td className="px-4 py-3">{m.lot}</td>
+                    <td className="px-4 py-3 font-mono">{m.lot || '—'}</td>
                     <td className={`px-4 py-3 font-bold ${isIn ? 'text-emerald-600' : 'text-red-600'}`}>
                       {m.qty > 0 ? '+' : ''}{m.qty} ctn
                     </td>
