@@ -3,8 +3,8 @@ import Modal from './Modal';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { AlertCircle } from 'lucide-react';
+import { PRODUCT_TYPES } from '../../utils/productTypes';
 
-const TYPES = ['Comprimé', 'Sirop', 'Injectable', 'Suppositoire', 'Pommade', 'Gouttes', 'Consommables', 'Autre'];
 const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoule', 'Pot', 'Blister', 'Étui'];
 
 export default function ProductModal({ isOpen, onClose, product }) {
@@ -13,7 +13,7 @@ export default function ProductModal({ isOpen, onClose, product }) {
   const isEdit = !!product;
 
   const [form, setForm] = useState({
-    code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
+    code: '', name: '', type: PRODUCT_TYPES[0], conditionnement: 'Boîte',
     category: '', tva: 20, buyPrice: 0, price: 0, priceGrossiste: 0, priceRevendeur: 0,
     stock: 0, rayon: '', allee: '', etagere: '', expiry: ''
   });
@@ -36,7 +36,7 @@ export default function ProductModal({ isOpen, onClose, product }) {
       });
     } else {
       setForm({
-        code: '', name: '', type: 'Comprimé', conditionnement: 'Boîte',
+        code: '', name: '', type: PRODUCT_TYPES[0], conditionnement: 'Boîte',
         category: '', tva: 20, buyPrice: 0, price: 0, priceGrossiste: 0, priceRevendeur: 0,
         stock: 0, rayon: '', allee: '', etagere: '', expiry: ''
       });
@@ -44,6 +44,11 @@ export default function ProductModal({ isOpen, onClose, product }) {
   }, [product, isOpen]);
 
   const productNames = [...new Set(products.map(p => p.name))].sort();
+
+  // Un produit existant peut avoir un ancien type absent de la liste : on le garde visible
+  const typeOptions = form.type && !PRODUCT_TYPES.includes(form.type)
+    ? [form.type, ...PRODUCT_TYPES]
+    : PRODUCT_TYPES;
 
   const handleSave = async () => {
     if (!form.code.trim() || !form.name.trim()) {
@@ -123,7 +128,7 @@ export default function ProductModal({ isOpen, onClose, product }) {
           <label className="block text-xs font-medium mb-1.5">Type *</label>
           <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
             className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs">
-            {TYPES.map(t => <option key={t}>{t}</option>)}
+            {typeOptions.map(t => <option key={t}>{t}</option>)}
           </select>
         </div>
         <div>

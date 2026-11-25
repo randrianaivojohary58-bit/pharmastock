@@ -83,6 +83,21 @@ export function DataProvider({ children }) {
   // CHARGEMENT INITIAL
   // ==========================================
   useEffect(() => {
+    // Pas d'utilisateur connecté : on vide les données et on ne charge rien
+    // (la base refuse les requêtes anonymes depuis l'activation du RLS)
+    if (!profile) {
+      setProducts([]);
+      setClients([]);
+      setSuppliers([]);
+      setSales([]);
+      setPurchases([]);
+      setJournal([]);
+      setLocations([]);
+      setInventories([]);
+      setLoading(false);
+      return;
+    }
+
     async function loadAllData() {
       setLoading(true);
       try {
@@ -174,7 +189,8 @@ export function DataProvider({ children }) {
       }
     }
     loadAllData();
-  }, []);
+    // Recharge à chaque connexion / changement d'utilisateur
+  }, [profile?.username]);
 
   // ==========================================
   // HELPERS INTERNES
@@ -449,6 +465,66 @@ export function DataProvider({ children }) {
       console.error('Erreur addProduct:', error);
       throw error;
     }
+  };
+
+  /**
+   * Import en masse du catalogue. Les produits sont créés SANS stock :
+   * le stock entre ensuite par les achats (lot + date de péremption).
+   * Retourne { created, skipped }.
+   */
+  const addProductsBulk = async (rows) => {
+    const existingIds = new Set(products.map(p => p.id));
+
+    // Codes automatiques : PRD-0001, PRD-0002...
+    let next = products.reduce((max, p) => {
+      const m = /^PRD-(\d+)$/.exec(p.id || '');
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, 0) + 1;
+
+    const locCache = {};
+    const toInsert = [];
+    let skipped = 0;
+
+    for (const r of rows) {
+      let code = (r.code || '').trim();
+      if (!code) code = `PRD-${String(next++).padStart(4, '0')}`;
+      if (existingIds.has(code)) { skipped++; continue; }
+      existingIds.add(code);
+
+      const locKey = `${r.rayon || ''}|${r.allee || ''}|${r.etagere || ''}`;
+      if (!(locKey in locCache)) locCache[locKey] = await getOrCreateLocation(r.rayon, r.allee, r.etagere);
+
+      toInsert.push({
+        id: code,
+        nom: r.name,
+        type: r.type,
+        conditionnement: r.conditionnement,
+        categorie: r.category,
+        tva: r.tva,
+        prix_achat: r.buyPrice,
+        prix_vente: r.price,
+        prix_grossiste: r.priceGrossiste,
+        prix_revendeur: r.priceRevendeur,
+        stock: 0,
+        emplacement_id: locCache[locKey]
+      });
+    }
+
+    let created = 0;
+    try {
+      for (let i = 0; i < toInsert.length; i += 100) {
+        const chunk = toInsert.slice(i, i + 100);
+        const { error } = await supabase.from('produits').insert(chunk);
+        if (error) throw error;
+        created += chunk.length;
+      }
+    } finally {
+      if (created > 0) {
+        await reloadProducts();
+        logJournal('Produit', 'Import catalogue', `${created} produit(s) importé(s)`);
+      }
+    }
+    return { created, skipped };
   };
 
   const updateProduct = async (id, data) => {
@@ -1104,7 +1180,7 @@ export function DataProvider({ children }) {
       locations, settings, loading, inventories,
       addProduct, updateProduct, deleteProduct,
       addClient, updateClient, deleteClient,
-      addSupplier, updateSupplier, deleteSupplier, updateProductPrices,
+      addSupplier, updateSupplier, deleteSupplier, updateProductPrices, addProductsBulk,
       addLocation, updateLocation, deleteLocation,
       addLot, updateLot, deleteLot,
       addSale, updateSale, deleteSale,

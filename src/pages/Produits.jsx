@@ -1,18 +1,21 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Upload } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import ProductModal from '../components/modals/ProductModal';
+import ImportProductsModal from '../components/modals/ImportProductsModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import { formatMoney } from '../utils/format';
 import { getEmplacement } from '../utils/stock';
+import { PRODUCT_TYPES } from '../utils/productTypes';
 
 export default function Produits() {
   const { products, deleteProduct } = useData();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
 
@@ -36,12 +39,20 @@ export default function Produits() {
         title="Produits"
         subtitle="Gestion du catalogue pharmaceutique"
         action={
+          <div className="flex gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="h-10 px-4 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-2 hover:bg-gray-50"
+          >
+            <Upload className="w-4 h-4" /> Importer
+          </button>
           <button
             onClick={() => { setEditProduct(null); setModalOpen(true); }}
             className="h-10 px-4 bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-2 hover:bg-emerald-700"
           >
             <Plus className="w-4 h-4" /> Nouveau produit
           </button>
+          </div>
         }
       />
 
@@ -57,14 +68,7 @@ export default function Produits() {
           className="h-10 px-3 bg-white border border-gray-200 rounded-lg text-xs"
         >
           <option value="">Tous les types</option>
-          <option>Comprimé</option>
-          <option>Sirop</option>
-          <option>Injectable</option>
-          <option>Suppositoire</option>
-          <option>Pommade</option>
-          <option>Gouttes</option>
-          <option>Consommables</option>
-          <option>Autre</option>
+          {PRODUCT_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
       </div>
 
@@ -153,6 +157,7 @@ export default function Produits() {
         onClose={() => setModalOpen(false)}
         product={editProduct}
       />
+      <ImportProductsModal isOpen={importOpen} onClose={() => setImportOpen(false)} />
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer le produit ?"

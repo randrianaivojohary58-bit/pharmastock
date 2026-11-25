@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import PageHeader from '../components/common/PageHeader';
+import { useAuth } from '../context/AuthContext';
 import {
   Rocket, ShieldCheck, MapPin, DollarSign, Clock, Headset, MonitorPlay, FileText,
   Search, ChevronDown, X, Mail, Phone, HelpCircle, BookOpen,
@@ -24,13 +25,43 @@ const ROLE_BADGE = {
 
 const ALL_ROLES = ['admin', 'magasinier', 'caissier'];
 
-const QUICK_START = [
-  { title: 'Produits', text: 'Créez les produits avec leurs prix : détail, revendeur et grossiste.', who: 'Admin, Magasinier' },
-  { title: 'Achats', text: 'Enregistrez les achats fournisseurs pour alimenter le stock.', who: 'Admin, Magasinier' },
-  { title: 'Clients', text: 'Ajoutez les clients en précisant leur type : pharmacie, grossiste, particulier…', who: 'Tous les rôles' },
-  { title: 'Ventes', text: 'Préparez la vente, puis encaissez-la à la caisse.', who: 'Magasinier puis Caissier' },
-  { title: 'Suivi', text: 'Surveillez le stock et les alertes de péremption (FEFO).', who: 'Tous les rôles' },
-];
+const ROLE_LABELS = {
+  admin: 'Administrateur',
+  magasinier: 'Magasinier',
+  caissier: 'Caissier',
+};
+
+// Démarrage rapide propre à chaque profil
+const QUICK_START = {
+  admin: [
+    { title: 'Utilisateurs', text: 'Créez les comptes et attribuez à chacun son rôle.' },
+    { title: 'Produits', text: 'Configurez les produits avec leurs prix : détail, revendeur et grossiste.' },
+    { title: 'Achats', text: 'Enregistrez les achats fournisseurs pour alimenter le stock.' },
+    { title: 'Ventes et caisse', text: 'Suivez les ventes préparées et les paiements encaissés.' },
+    { title: 'Suivi', text: 'Consultez les rapports, le journal et les alertes de péremption (FEFO).' },
+  ],
+  magasinier: [
+    { title: 'Produits', text: 'Créez ou mettez à jour les produits et leurs prix.' },
+    { title: 'Achats', text: 'Enregistrez chaque réception fournisseur, avec la date de péremption.' },
+    { title: 'Emplacements', text: 'Rangez chaque produit à son emplacement : Rayon, Allée, Étagère.' },
+    { title: 'Préparer une vente', text: 'Créez la vente avec le client et les produits. Le caissier l\'encaissera.' },
+    { title: 'Inventaire', text: 'Comptez le stock réel et surveillez les produits proches de la péremption.' },
+  ],
+  caissier: [
+    { title: 'Client', text: 'Vérifiez ou créez le client, en précisant son type.' },
+    { title: 'À encaisser', text: 'Retrouvez la vente préparée par le magasinier, ou faites une vente directe.' },
+    { title: 'Encaissement', text: 'Saisissez le montant reçu et validez le paiement.' },
+    { title: 'Impression', text: 'Imprimez la facture A4 ou le ticket de caisse 80 mm.' },
+    { title: 'Créances', text: 'Suivez les paiements restants à recevoir.' },
+  ],
+  all: [
+    { title: 'Produits', text: 'Créez les produits avec leurs prix : détail, revendeur et grossiste.', who: 'Admin, Magasinier' },
+    { title: 'Achats', text: 'Enregistrez les achats fournisseurs pour alimenter le stock.', who: 'Admin, Magasinier' },
+    { title: 'Clients', text: 'Ajoutez les clients en précisant leur type : pharmacie, grossiste, particulier…', who: 'Tous les rôles' },
+    { title: 'Ventes', text: 'Préparez la vente, puis encaissez-la à la caisse.', who: 'Magasinier puis Caissier' },
+    { title: 'Suivi', text: 'Surveillez le stock et les alertes de péremption (FEFO).', who: 'Tous les rôles' },
+  ],
+};
 
 const SECTIONS = [
   {
@@ -65,7 +96,7 @@ const SECTIONS = [
     icon: MonitorPlay,
     title: 'Espace Caisse et encaissement',
     summary: 'La vente se fait en deux étapes.',
-    roles: ['admin', 'magasinier', 'caissier'],
+    roles: ['admin', 'caissier'],
     keywords: 'caisse encaissement paiement attente à encaisser montant reçu vente préparation',
     content: (
       <div className="space-y-3 text-sm text-gray-600">
@@ -114,6 +145,42 @@ const SECTIONS = [
             </tbody>
           </table>
         </div>
+      </div>
+    ),
+  },
+  {
+    id: 'produits-achats',
+    icon: Rocket,
+    title: 'Produits et achats',
+    summary: 'Alimenter le catalogue et le stock.',
+    roles: ['admin', 'magasinier'],
+    keywords: 'produits achats fournisseur réception prix achat stock catalogue',
+    content: (
+      <div className="space-y-3 text-sm text-gray-600">
+        <p>
+          Créez d'abord les <strong className="text-gray-800">produits</strong> avec leurs prix de vente (détail,
+          revendeur, grossiste). Enregistrez ensuite chaque réception dans <strong className="text-gray-800">Achats</strong> :
+          le stock augmente avec la quantité reçue.
+        </p>
+        <p>Renseignez toujours la date de péremption pour que les alertes fonctionnent.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'preparer-vente',
+    icon: MonitorPlay,
+    title: 'Préparer une vente',
+    summary: 'Votre partie du circuit de vente.',
+    roles: ['admin', 'magasinier'],
+    keywords: 'préparer vente bon de sortie en attente magasinier client produits proforma',
+    content: (
+      <div className="space-y-3 text-sm text-gray-600">
+        <p>
+          Dans <strong className="text-gray-800">Ventes</strong>, choisissez le client, ajoutez les produits puis
+          enregistrez. La vente reste <strong className="text-gray-800">« En attente »</strong> : c'est le caissier qui
+          l'encaisse.
+        </p>
+        <p>Le stock n'est déduit qu'au moment de l'encaissement, selon la règle FEFO.</p>
       </div>
     ),
   },
@@ -216,38 +283,71 @@ const SECTIONS = [
       </ul>
     ),
   },
+  {
+    id: 'administration',
+    icon: ShieldCheck,
+    title: 'Administration',
+    summary: 'Utilisateurs, rapports, journal et paramètres.',
+    roles: ['admin'],
+    keywords: 'administration utilisateurs comptes rapports journal paramètres mot de passe rôle tva société',
+    content: (
+      <ul className="list-disc space-y-1 pl-5 text-sm text-gray-600">
+        <li><strong className="text-gray-800">Utilisateurs</strong> : créer un compte, changer un rôle ou un mot de passe, supprimer un compte.</li>
+        <li><strong className="text-gray-800">Rapports</strong> : analyser les ventes, achats et le stock.</li>
+        <li><strong className="text-gray-800">Journal</strong> : retrouver qui a fait quoi.</li>
+        <li><strong className="text-gray-800">Paramètres</strong> : informations de la société, TVA, délais.</li>
+      </ul>
+    ),
+  },
 ];
 
 const FAQ = [
   {
+    roles: ALL_ROLES,
     q: 'Je ne vois pas une page dans le menu.',
-    a: 'Le menu dépend de votre rôle. Par exemple, la Caisse est réservée à l\'Admin et au Caissier. Demandez à l\'administrateur de vérifier votre rôle dans la page Utilisateurs.',
+    a: 'Le menu dépend de votre rôle. Si une page vous manque, demandez à l\'administrateur de vérifier votre rôle dans la page Utilisateurs.',
   },
   {
+    roles: ALL_ROLES,
     q: 'Une vente reste « En attente ».',
     a: 'C\'est normal : elle a été préparée par le magasinier. Le caissier doit la valider dans « À encaisser » en saisissant le montant reçu.',
   },
   {
+    roles: ['admin', 'magasinier'],
+    q: 'Comment préparer une vente ?',
+    a: 'Dans Ventes, choisissez le client, ajoutez les produits et enregistrez. La vente reste « En attente » jusqu\'à l\'encaissement, et le stock n\'est déduit qu\'à ce moment.',
+  },
+  {
+    roles: ['admin', 'caissier'],
+    q: 'Un client ne paie qu\'une partie du montant.',
+    a: 'Saisissez le montant réellement reçu. La vente passe en « Partielle » et le reste à payer apparaît dans Créances.',
+  },
+  {
+    roles: ALL_ROLES,
     q: 'Le prix proposé n\'est pas celui que j\'attendais.',
     a: 'Le prix dépend du type du client sélectionné. Vérifiez le type du client (grossiste, pharmacie, particulier…) et les prix saisis dans la fiche du produit.',
   },
   {
+    roles: ['admin', 'caissier'],
     q: 'Comment réimprimer une facture ou un ticket ?',
     a: 'Ouvrez l\'historique de la caisse, retrouvez la vente, puis choisissez Facture A4 ou Ticket 80 mm.',
   },
   {
+    roles: ['admin', 'magasinier'],
     q: 'Le stock affiché ne correspond pas au stock réel.',
     a: 'Faites un inventaire pour enregistrer l\'écart, puis consultez la page Mouvements pour retrouver l\'origine de la différence.',
   },
 ];
 
 const GLOSSARY = [
-  { term: 'FEFO', def: 'Le lot qui expire en premier est vendu en premier.' },
-  { term: 'Lot', def: 'Groupe de produits reçus ensemble, avec la même date de péremption.' },
-  { term: 'Créance', def: 'Somme qu\'un client doit encore payer.' },
-  { term: 'Bon de sortie', def: 'Document qui prépare une sortie de stock avant l\'encaissement.' },
-  { term: 'Inventaire', def: 'Comptage du stock réel pour le comparer à celui du logiciel.' },
-  { term: 'Mouvement', def: 'Toute entrée, sortie ou correction de stock.' },
+  { roles: ALL_ROLES, term: 'Statuts de vente', def: 'En attente : pas encore payée. Partielle : acompte reçu. Payée : soldée.' },
+  { roles: ['admin', 'magasinier'], term: 'FEFO', def: 'Le lot qui expire en premier est vendu en premier.' },
+  { roles: ['admin', 'magasinier'], term: 'Lot', def: 'Groupe de produits reçus ensemble, avec la même date de péremption.' },
+  { roles: ['admin', 'caissier'], term: 'Créance', def: 'Somme qu\'un client doit encore payer.' },
+  { roles: ['admin', 'caissier'], term: 'Encaissement', def: 'Validation du paiement d\'une vente préparée, avec le montant reçu.' },
+  { roles: ['admin', 'magasinier'], term: 'Bon de sortie', def: 'Document qui prépare une sortie de stock avant l\'encaissement.' },
+  { roles: ['admin', 'magasinier'], term: 'Inventaire', def: 'Comptage du stock réel pour le comparer à celui du logiciel.' },
+  { roles: ['admin', 'magasinier'], term: 'Mouvement', def: 'Toute entrée, sortie ou correction de stock.' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -322,9 +422,19 @@ function FaqItem({ q, a, open, onToggle }) {
 /* ------------------------------------------------------------------ */
 
 export default function Aide() {
+  const { profile } = useAuth();
+
+  // Rôle de la personne connectée ; null si l'aide est ouverte sans connexion
+  const userRole = ROLE_LABELS[profile?.roleKey] ? profile.roleKey : null;
+  // L'admin et les visiteurs peuvent changer de profil ; magasinier et caissier voient le leur
+  const canSwitchRole = !userRole || userRole === 'admin';
+
   const [query, setQuery] = useState('');
-  const [role, setRole] = useState('all');
-  const [openSections, setOpenSections] = useState(() => new Set(['caisse']));
+  const [selectedRole, setSelectedRole] = useState(userRole || 'all');
+  const role = canSwitchRole ? selectedRole : userRole;
+  const [openSections, setOpenSections] = useState(
+    () => new Set([userRole === 'magasinier' ? 'preparer-vente' : 'caisse'])
+  );
   const [openFaq, setOpenFaq] = useState(null);
 
   const q = query.trim().toLowerCase();
@@ -344,15 +454,21 @@ export default function Aide() {
   );
 
   const faq = useMemo(
-    () => (searching ? FAQ.filter((f) => matches(`${f.q} ${f.a}`)) : FAQ),
+    () =>
+      FAQ.filter(
+        (f) => (role === 'all' || f.roles.includes(role)) && (!searching || matches(`${f.q} ${f.a}`))
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [q]
+    [q, role]
   );
 
   const glossary = useMemo(
-    () => (searching ? GLOSSARY.filter((g) => matches(`${g.term} ${g.def}`)) : GLOSSARY),
+    () =>
+      GLOSSARY.filter(
+        (g) => (role === 'all' || g.roles.includes(role)) && (!searching || matches(`${g.term} ${g.def}`))
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [q]
+    [q, role]
   );
 
   const toggleSection = (id) =>
@@ -370,6 +486,16 @@ export default function Aide() {
   return (
     <div className="space-y-8">
       <PageHeader title="Aide & Documentation" subtitle="Guide d'utilisation complet" />
+
+      {userRole && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600" />
+          <p>
+            Aide adaptée à votre profil : <strong>{ROLE_LABELS[userRole]}</strong>.
+            {canSwitchRole && " En tant qu'administrateur, vous pouvez aussi consulter l'aide des autres profils ci-dessous."}
+          </p>
+        </div>
+      )}
 
       {/* Recherche et filtre par rôle */}
       <div className="space-y-3">
@@ -395,13 +521,14 @@ export default function Aide() {
           )}
         </div>
 
+        {canSwitchRole && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-500">Afficher l'aide pour :</span>
           {ROLES.map((r) => (
             <button
               key={r.id}
               type="button"
-              onClick={() => setRole(r.id)}
+              onClick={() => setSelectedRole(r.id)}
               aria-pressed={role === r.id}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 role === r.id
@@ -413,6 +540,7 @@ export default function Aide() {
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {/* Démarrage rapide (sequence réelle) */}
@@ -423,7 +551,7 @@ export default function Aide() {
             <h2 id="demarrage" className="text-lg font-bold text-gray-800">Démarrage rapide</h2>
           </div>
           <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {QUICK_START.map((step, i) => (
+            {(QUICK_START[role] || QUICK_START.all).map((step, i) => (
               <li key={step.title} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
@@ -432,7 +560,9 @@ export default function Aide() {
                   <span className="font-semibold text-gray-800">{step.title}</span>
                 </div>
                 <p className="text-xs leading-relaxed text-gray-600">{step.text}</p>
-                <p className="mt-2 text-[11px] font-medium text-emerald-700">{step.who}</p>
+                {step.who && (
+                  <p className="mt-2 text-[11px] font-medium text-emerald-700">{step.who}</p>
+                )}
               </li>
             ))}
           </ol>

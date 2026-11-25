@@ -4,19 +4,44 @@ import { supabase } from '../lib/supabase';
 import PageHeader from '../components/common/PageHeader';
 import { useToast } from '../context/ToastContext';
 
+const MIN_PASSWORD = 6;
+
+// Appelle la fonction Edge "admin-users" (création, mot de passe, suppression)
+// et remonte le vrai message d'erreur renvoyé par le serveur
+async function callAdminUsers(body) {
+  const { data, error } = await supabase.functions.invoke('bright-function', { body });
+
+  if (error) {
+    let message = error.message;
+    try {
+      const details = await error.context.json();
+      if (details?.error) message = details.error;
+    } catch {
+      /* on garde le message par défaut */
+    }
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 export default function Utilisateurs() {
   const { showToast } = useToast();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  
+
   const [form, setForm] = useState({ username: '', password: '', full_name: '', role: 'caissier' });
 
   // Charger les utilisateurs
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('profiles').select('*').order('full_name');
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, username, full_name, role, avatar, auth_id')
+      .order('full_name');
     if (!error) setUsers(data);
     setLoading(false);
   };
@@ -37,50 +62,80 @@ export default function Utilisateurs() {
   };
 
   const handleSave = async () => {
-    if (!form.username || !form.full_name) {
+    if (saving) return;
+
+    if (!form.username.trim() || !form.full_name.trim()) {
       showToast('Attention', 'Nom complet et identifiant requis', 'error');
       return;
     }
+    if (form.password && form.password.length < MIN_PASSWORD) {
+      showToast('Attention', `Mot de passe : ${MIN_PASSWORD} caractères minimum`, 'error');
+      return;
+    }
 
-    if (editingUser) {
-      // Modification (on ne change le mot de passe que s'il est rempli)
-      const updates = { full_name: form.full_name, role: form.role };
-      if (form.password) updates.password = form.password;
+    setSaving(true);
+    try {
+      if (editingUser) {
+        // 1. Nom et rôle : directement dans profiles (réservé à l'admin par le RLS)
+        const { error } = await supabase
+          .from('profiles')
+          .update({ full_name: form.full_name.trim(), role: form.role })
+          .eq('id', editingUser.id);
+        if (error) throw error;
 
-      const { error } = await supabase.from('profiles').update(updates).eq('id', editingUser.id);
-      if (!error) {
+        // 2. Mot de passe : seulement s'il est rempli, via la fonction sécurisée
+        if (form.password) {
+          if (!editingUser.auth_id) {
+            throw new Error("Ce profil n'est lié à aucun compte de connexion");
+          }
+          await callAdminUsers({
+            action: 'reset_password',
+            auth_id: editingUser.auth_id,
+            password: form.password,
+          });
+        }
         showToast('Succès', 'Utilisateur modifié');
-        fetchUsers();
-        setIsModalOpen(false);
       } else {
-        showToast('Erreur', error.message, 'error');
-      }
-    } else {
-      // Création
-      if (!form.password) {
-        showToast('Attention', 'Mot de passe requis pour un nouvel utilisateur', 'error');
-        return;
-      }
-      const { error } = await supabase.from('profiles').insert([form]);
-      if (!error) {
+        // Création du compte de connexion + du profil
+        if (!form.password) {
+          showToast('Attention', 'Mot de passe requis pour un nouvel utilisateur', 'error');
+          return;
+        }
+        await callAdminUsers({
+          action: 'create',
+          username: form.username,
+          password: form.password,
+          full_name: form.full_name,
+          role: form.role,
+        });
         showToast('Succès', 'Utilisateur ajouté');
-        fetchUsers();
-        setIsModalOpen(false);
-      } else {
-        showToast('Erreur', error.message, 'error');
       }
+
+      fetchUsers();
+      setIsModalOpen(false);
+    } catch (err) {
+      showToast('Erreur', err.message || 'Une erreur est survenue', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (user) => {
     if (!window.confirm('Voulez-vous vraiment supprimer cet utilisateur ?')) return;
-    
-    const { error } = await supabase.from('profiles').delete().eq('id', id);
-    if (!error) {
+
+    try {
+      if (user.auth_id) {
+        // Supprime le compte de connexion (le profil part avec lui)
+        await callAdminUsers({ action: 'delete', auth_id: user.auth_id });
+      } else {
+        // Profil orphelin sans compte de connexion
+        const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+        if (error) throw error;
+      }
       showToast('Succès', 'Utilisateur supprimé');
       fetchUsers();
-    } else {
-      showToast('Erreur', error.message, 'error');
+    } catch (err) {
+      showToast('Erreur', err.message || 'Suppression impossible', 'error');
     }
   };
 
@@ -138,7 +193,7 @@ export default function Utilisateurs() {
                         <Edit className="w-3 h-3" />
                       </button>
                       {u.username !== 'admin' && (
-                        <button onClick={() => handleDelete(u.id)}
+                        <button onClick={() => handleDelete(u)}
                           className="w-7 h-7 bg-red-50 text-red-600 rounded hover:bg-red-100 flex items-center justify-center">
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -159,7 +214,7 @@ export default function Utilisateurs() {
             <h2 className="text-lg font-bold mb-4">
               {editingUser ? 'Modifier l\'utilisateur' : 'Ajouter un utilisateur'}
             </h2>
-            
+
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium mb-1">Nom complet *</label>
@@ -173,8 +228,11 @@ export default function Utilisateurs() {
                   className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs disabled:bg-gray-50" />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Mot de passe {editingUser ? '(laisser vide pour ne pas changer)' : '*'}</label>
+                <label className="block text-xs font-medium mb-1">
+                  Mot de passe {editingUser ? '(laisser vide pour ne pas changer)' : `* (${MIN_PASSWORD} caractères minimum)`}
+                </label>
                 <input type="password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})}
+                  autoComplete="new-password"
                   className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" />
               </div>
               <div>
@@ -189,10 +247,12 @@ export default function Utilisateurs() {
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-xs">Annuler</button>
-              <button onClick={handleSave}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs">Enregistrer</button>
+              <button onClick={() => setIsModalOpen(false)} disabled={saving}
+                className="px-4 py-2 border border-gray-200 rounded-lg text-xs disabled:opacity-50">Annuler</button>
+              <button onClick={handleSave} disabled={saving}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs disabled:opacity-50">
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
             </div>
           </div>
         </div>
