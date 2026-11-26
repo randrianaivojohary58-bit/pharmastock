@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import SupplierModal from '../components/modals/SupplierModal';
@@ -9,6 +11,7 @@ import { getSupplierMargins } from '../utils/pricing';
 
 export default function Fournisseurs() {
   const { suppliers, deleteSupplier } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState(null);
@@ -19,8 +22,14 @@ export default function Fournisseurs() {
   );
 
   const handleDelete = async () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const name = suppliers.find(s => s.id === deleteId)?.name || 'Fournisseur';
+    try {
       await deleteSupplier(deleteId);
+      showToast('Succès', `Fournisseur « ${name} » supprimé`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'ce fournisseur'), 'error');
+    } finally {
       setDeleteId(null);
     }
   };
@@ -81,7 +90,7 @@ export default function Fournisseurs() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer le fournisseur ?"
-        message="Voulez-vous vraiment supprimer ce fournisseur ?"
+        message={`Voulez-vous vraiment supprimer « ${suppliers.find(s => s.id === deleteId)?.name || 'ce fournisseur'} » ? Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />

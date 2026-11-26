@@ -3,7 +3,10 @@ import Modal from './Modal';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { formatMoney } from '../../utils/format';
-import { parseProductText, normalizeProductRows, downloadTemplate, sheetRowsToText } from '../../utils/importProducts';
+import {
+  readTable, guessMapping, rowsFromTable, normalizeProductRows,
+  downloadTemplate, sheetRowsToText, FIELD_OPTIONS, TYPES
+} from '../../utils/importProducts';
 import { Download, FileUp } from 'lucide-react';
 
 export default function ImportProductsModal({ isOpen, onClose }) {
@@ -12,16 +15,42 @@ export default function ImportProductsModal({ isOpen, onClose }) {
   const fileRef = useRef(null);
 
   const [text, setText] = useState('');
-  const [saving, setSaving] = useState(false);
   const [fileName, setFileName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Réglages choisis par l'utilisateur
+  const [custom, setCustom] = useState(null);            // { text, map } : rôles modifiés à la main
+  const [headerOverride, setHeaderOverride] = useState(null);
+  const [nameAsCode, setNameAsCode] = useState(true);
+  const [defaultType, setDefaultType] = useState(TYPES.includes('Autre') ? 'Autre' : TYPES[0]);
+
+  const table = useMemo(() => readTable(text), [text]);
+  const guessed = useMemo(() => guessMapping(table), [table]);
+
+  const hasHeader = headerOverride ?? guessed.hasHeader;
+  const mapping = custom && custom.text === text ? custom.map : guessed.map;
+  const hasCodeColumn = mapping.includes('code');
+
+  const setColumnRole = (index, key) => {
+    const next = [...mapping];
+    // un rôle n'est utilisé que par une seule colonne
+    if (key) next.forEach((k, i) => { if (k === key) next[i] = null; });
+    next[index] = key || null;
+    setCustom({ text, map: next });
+  };
 
   const rows = useMemo(
-    () => normalizeProductRows(parseProductText(text), products),
-    [text, products]
+    () => normalizeProductRows(
+      rowsFromTable(table, mapping, hasHeader),
+      products,
+      { nameAsCode: nameAsCode && !hasCodeColumn, defaultType }
+    ),
+    [table, mapping, hasHeader, products, nameAsCode, hasCodeColumn, defaultType]
   );
   const okRows = rows.filter(r => r.status === 'ok');
   const skipRows = rows.filter(r => r.status === 'skip');
   const errorRows = rows.filter(r => r.status === 'error');
+  const hasName = mapping.includes('name');
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
@@ -41,6 +70,7 @@ export default function ImportProductsModal({ isOpen, onClose }) {
       } else {
         setText(await file.text());
       }
+      setHeaderOverride(null);
       setFileName(file.name);
     } catch (err) {
       console.error('Erreur lecture fichier:', err);
@@ -48,7 +78,8 @@ export default function ImportProductsModal({ isOpen, onClose }) {
     }
   };
 
-  const handleClose = () => { setText(''); setFileName(''); onClose(); };
+  const reset = () => { setText(''); setFileName(''); setCustom(null); setHeaderOverride(null); };
+  const handleClose = () => { reset(); onClose(); };
 
   const handleImport = async () => {
     if (!okRows.length) return;
@@ -56,8 +87,7 @@ export default function ImportProductsModal({ isOpen, onClose }) {
     try {
       const res = await addProductsBulk(okRows.map(r => r.data));
       showToast('Succès', `${res.created} produit(s) importé(s)${res.skipped ? `, ${res.skipped} ignoré(s)` : ''}`);
-      setText('');
-      setFileName('');
+      reset();
       onClose();
     } catch (err) {
       showToast('Erreur', err.message, 'error');
@@ -73,6 +103,8 @@ export default function ImportProductsModal({ isOpen, onClose }) {
   };
   const label = (status) => (status === 'ok' ? 'À importer' : status === 'skip' ? 'Ignoré' : 'Erreur');
 
+  const dataRows = hasHeader ? table.slice(1) : table;
+
   return (
     <Modal
       isOpen={isOpen} onClose={handleClose}
@@ -82,7 +114,7 @@ export default function ImportProductsModal({ isOpen, onClose }) {
           <button onClick={handleClose} className="px-4 py-2 border border-gray-200 rounded-lg text-xs">Annuler</button>
           <button
             onClick={handleImport}
-            disabled={!okRows.length || saving}
+            disabled={!okRows.length || saving || !hasName}
             className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {saving ? 'Import en cours...' : `Importer ${okRows.length} produit(s)`}
@@ -92,10 +124,9 @@ export default function ImportProductsModal({ isOpen, onClose }) {
     >
       <div className="space-y-4">
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs text-emerald-900 space-y-1">
-          <p><strong>1.</strong> Remplissez vos produits dans Excel (une ligne par produit), puis <strong>chargez le fichier Excel (.xlsx)</strong> ou <strong>copiez les cellules</strong> et collez-les ci-dessous. Les fichiers CSV marchent aussi.</p>
-          <p><strong>2.</strong> Vous pouvez aussi coller seulement une <strong>liste de noms</strong>, un par ligne.</p>
-          <p><strong>3.</strong> Colonnes : code (facultatif), nom, type, conditionnement, gamme, tva, prix_achat, prix_vente, prix_grossiste, prix_revendeur, rayon, allee, etagere.</p>
-          <p className="text-emerald-700">Seule la première feuille du fichier Excel est lue. Le code est généré automatiquement s'il est vide. Si le prix de vente est vide, il est calculé à partir du prix d'achat avec la marge par défaut. Le stock n'est pas importé : il entre par les achats, avec le lot et la date de péremption.</p>
+          <p><strong>1.</strong> Chargez votre fichier Excel (.xlsx) ou CSV, ou collez les cellules copiées depuis Excel. Une ligne par produit.</p>
+          <p><strong>2.</strong> Vérifiez le rôle de chaque colonne dans le tableau « Colonnes du fichier » : vous pouvez le changer.</p>
+          <p className="text-emerald-700">Le stock n'est pas importé : il entre par les achats, avec le lot et la date de péremption. Seule la première feuille Excel est lue.</p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -112,13 +143,76 @@ export default function ImportProductsModal({ isOpen, onClose }) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          rows={6}
-          placeholder="Collez ici vos produits copiés depuis Excel..."
+          rows={4}
+          placeholder="Ou collez ici vos produits copiés depuis Excel..."
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
         />
 
-        {rows.length > 0 && (
+        {table.length > 0 && (
           <>
+            {/* ===== COLONNES DU FICHIER ===== */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                <strong className="text-xs text-gray-700">Colonnes du fichier</strong>
+                <label className="flex items-center gap-2 text-[11px] text-gray-600 cursor-pointer">
+                  <input type="checkbox" checked={hasHeader} onChange={(e) => setHeaderOverride(e.target.checked)} />
+                  La première ligne contient les titres
+                </label>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-white">
+                      {mapping.map((k, i) => (
+                        <th key={i} className="px-2 py-2 text-left align-top min-w-[150px]">
+                          <select
+                            value={k || ''}
+                            onChange={(e) => setColumnRole(i, e.target.value)}
+                            className={`w-full h-8 px-2 border rounded-lg text-xs font-semibold ${
+                              k ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-400'
+                            }`}
+                          >
+                            {FIELD_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                          </select>
+                          {hasHeader && <div className="mt-1 text-[10px] text-gray-400 truncate">{table[0][i]}</div>}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dataRows.slice(0, 4).map((r, ri) => (
+                      <tr key={ri} className="border-t border-gray-100 text-gray-600">
+                        {mapping.map((_, ci) => <td key={ci} className="px-2 py-1.5 truncate max-w-[220px]">{r[ci] || ''}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {!hasName && (
+              <p className="text-xs text-red-600 font-semibold">
+                Choisissez la colonne « Nom du produit » pour pouvoir importer.
+              </p>
+            )}
+
+            {/* ===== OPTIONS ===== */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+              {!hasCodeColumn && (
+                <label className="flex items-center gap-2 cursor-pointer text-gray-700">
+                  <input type="checkbox" checked={nameAsCode} onChange={(e) => setNameAsCode(e.target.checked)} />
+                  Utiliser le <strong>nom du produit comme code</strong> (sinon : PRD-0001, PRD-0002...)
+                </label>
+              )}
+              <label className="flex items-center gap-2 text-gray-700">
+                Type par défaut :
+                <select value={defaultType} onChange={(e) => setDefaultType(e.target.value)} className="h-8 px-2 border border-gray-200 rounded-lg text-xs">
+                  {TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {/* ===== APERÇU ===== */}
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold">{okRows.length} à importer</span>
               {skipRows.length > 0 && <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 font-bold">{skipRows.length} ignoré(s)</span>}
@@ -132,7 +226,7 @@ export default function ImportProductsModal({ isOpen, onClose }) {
                     <tr>
                       <th className="px-3 py-2 text-left">Ligne</th>
                       <th className="px-3 py-2 text-left">Code</th>
-                      <th className="px-3 py-2 text-left">Nom</th>
+                      <th className="px-3 py-2 text-left">Produit</th>
                       <th className="px-3 py-2 text-left">Type</th>
                       <th className="px-3 py-2 text-left">Cond.</th>
                       <th className="px-3 py-2 text-left">Gamme</th>

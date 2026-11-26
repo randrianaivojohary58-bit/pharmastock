@@ -4,6 +4,7 @@ import CustomSelect from '../common/CustomSelect';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { formatMoney } from '../../utils/format';
+import { getSupplierMargins, getSellPrices } from '../../utils/pricing';
 
 const TYPES = ['Comprimé', 'Sirop', 'Injectable', 'Suppositoire', 'Pommade', 'Gouttes', 'Consommables', 'Autre'];
 const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoule', 'Pot', 'Blister', 'Étui'];
@@ -11,7 +12,7 @@ const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoul
 const newLine = () => ({ productName: '', quantity: 1, price: 0, type: 'Comprimé', conditionnement: 'Boîte' });
 
 export default function PurchaseModal({ isOpen, onClose, purchase }) {
-  const { products, suppliers, addPurchase, addProduct } = useData();
+  const { products, suppliers, addPurchase, addProduct, updateProductPrices } = useData();
   const { showToast } = useToast();
   const isEdit = !!purchase;
 
@@ -21,6 +22,11 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
   });
 
   const productNames = products.map(p => p.name).sort();
+
+  // Marge du fournisseur choisi -> prix de vente calculés automatiquement
+  const [applyMargin, setApplyMargin] = useState(true);
+  const selectedSupplier = suppliers.find(s => s.name === form.supplier);
+  const margins = getSupplierMargins(selectedSupplier);
 
   // Un produit est "nouveau" si son nom n'existe pas encore dans le catalogue
   const isNewProduct = (name) =>
@@ -77,15 +83,18 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
     if (!supplierObj) { showToast('Erreur', 'Fournisseur introuvable', 'error'); return; }
 
     const purchaseProducts = [];
+    const existingToUpdate = [];
     
     try {
       for (const line of validLines) {
         // Chercher le produit par son nom
         let product = products.find(p => p.name.toLowerCase() === line.productName.trim().toLowerCase());
+        const wasExisting = !!product;
         
         if (!product) {
           // Si le produit n'existe pas, on le crée
           const newCode = `NEW-${Date.now()}-${line.productName.trim().substring(0, 3).toUpperCase()}`;
+          const sellPrices = getSellPrices(line.price, margins);
           
           // addProduct retourne maintenant l'objet créé
           const createdProduct = await addProduct({
@@ -96,11 +105,11 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
             category: '',
             tva: form.tvaRate,
             buyPrice: line.price,
-            price: line.price * 1.2, 
-            priceGrossiste: line.price * 1.1,
-            priceRevendeur: line.price * 1.15,
+            price: sellPrices.price,                    // marge du fournisseur
+            priceGrossiste: sellPrices.priceGrossiste,
+            priceRevendeur: sellPrices.priceRevendeur,
             stock: 0, 
-            rayon: '', allee: '', etagere: '', expiry: ''
+            rayon: '', allee: '', etagere: '', casier: '', expiry: ''
           });
 
           product = createdProduct;
@@ -110,6 +119,8 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
         if (!product) {
           throw new Error(`Impossible de trouver ou créer le produit: ${line.productName}`);
         }
+
+        if (wasExisting) existingToUpdate.push({ id: product.id, price: line.price });
 
         purchaseProducts.push({
           productId: product.id,
@@ -130,6 +141,14 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
         showToast('Info', 'Modification non implémentée');
       } else {
         await addPurchase(purchaseData);
+
+        // Produits existants : nouveau prix d'achat + prix de vente recalculés avec la marge du fournisseur
+        // (seulement si l'achat est reçu)
+        if (applyMargin && form.status === 'Reçu') {
+          for (const item of existingToUpdate) {
+            await updateProductPrices(item.id, { buyPrice: item.price, ...getSellPrices(item.price, margins) });
+          }
+        }
         showToast('Succès', 'Achat enregistré');
       }
       onClose();
@@ -174,6 +193,19 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
           </div>
         </div>
 
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-emerald-800">
+              {selectedSupplier ? <>Marge de <strong>{selectedSupplier.name}</strong></> : 'Marge par défaut'} :{' '}
+              détail <strong>{margins.margin} %</strong> · revendeur <strong>{margins.marginRevendeur} %</strong> · grossiste <strong>{margins.marginGrossiste} %</strong>
+            </p>
+            <label className="flex items-center gap-2 text-[11px] text-emerald-900 cursor-pointer">
+              <input type="checkbox" checked={applyMargin} onChange={(e) => setApplyMargin(e.target.checked)} />
+              Mettre à jour les prix de vente des produits existants
+            </label>
+          </div>
+        </div>
+
         <div>
           <div className="flex justify-between items-center mb-2">
             <h4 className="text-xs font-bold">Produits</h4>
@@ -201,6 +233,11 @@ export default function PurchaseModal({ isOpen, onClose, purchase }) {
                 </div>
                 <div className="col-span-3">
                   <input type="number" min={0} value={line.price} onChange={(e) => updateLine(i, 'price', Number(e.target.value))} placeholder="Prix achat" className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs" />
+                  {line.price > 0 && (
+                    <div className="mt-1 text-[10px] text-emerald-700 font-semibold">
+                      Vente : {formatMoney(getSellPrices(line.price, margins).price)} (+{margins.margin} %)
+                    </div>
+                  )}
                 </div>
                 <div className="col-span-1 text-xs font-bold text-emerald-700">{formatMoney((line.quantity || 0) * (line.price || 0))}</div>
                 <button onClick={() => removeLine(i)} className="col-span-1 h-9 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100">×</button>

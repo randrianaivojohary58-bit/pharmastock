@@ -18,6 +18,7 @@ const mapProductRow = (p) => ({
   rayon: p.emplacement?.rayon || '',
   allee: p.emplacement?.allee || '',
   etagere: p.emplacement?.etagere || '',
+  casier: p.emplacement?.casier || '',
   lots: (p.lots || []).map(l => ({
     id: l.numero_lot,
     expiry: l.date_expiration,
@@ -339,15 +340,20 @@ export function DataProvider({ children }) {
   // ==========================================
   // EMPLACEMENTS
   // ==========================================
-  const getOrCreateLocation = async (rayon, allee, etagere) => {
-    if (!rayon && !allee && !etagere) return null;
+  // Emplacement = Pièce (rayon) > Équipement (allee) > Niveau (etagere) > Case (casier)
+  const getOrCreateLocation = async (rayon, allee, etagere, casier) => {
+    const r = (rayon || '').trim();
+    const a = (allee || '').trim();
+    const e = (etagere || '').trim();
+    const c = (casier || '').trim();
+    if (!r && !a && !e && !c) return null;
     const existingLoc = locations.find(
-      l => l.rayon === rayon && l.allee === allee && l.etagere === etagere
+      l => (l.rayon || '') === r && (l.allee || '') === a && (l.etagere || '') === e && (l.casier || '') === c
     );
     if (existingLoc) return existingLoc.id;
     const { data: newLoc, error } = await supabase
       .from('emplacements')
-      .insert([{ rayon: rayon || '', allee: allee || '', etagere: etagere || '' }])
+      .insert([{ rayon: r, allee: a, etagere: e, casier: c }])
       .select()
       .single();
     if (!error && newLoc) {
@@ -410,7 +416,7 @@ export function DataProvider({ children }) {
         
         return updatedProduct;
       } else {
-        const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere);
+        const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere, data.casier);
 
         const { data: newDb, error } = await supabase
           .from('produits')
@@ -491,8 +497,8 @@ export function DataProvider({ children }) {
       if (existingIds.has(code)) { skipped++; continue; }
       existingIds.add(code);
 
-      const locKey = `${r.rayon || ''}|${r.allee || ''}|${r.etagere || ''}`;
-      if (!(locKey in locCache)) locCache[locKey] = await getOrCreateLocation(r.rayon, r.allee, r.etagere);
+      const locKey = `${r.rayon || ''}|${r.allee || ''}|${r.etagere || ''}|${r.casier || ''}`;
+      if (!(locKey in locCache)) locCache[locKey] = await getOrCreateLocation(r.rayon, r.allee, r.etagere, r.casier);
 
       toInsert.push({
         id: code,
@@ -529,7 +535,7 @@ export function DataProvider({ children }) {
 
   const updateProduct = async (id, data) => {
     try {
-      const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere);
+      const emplacementId = await getOrCreateLocation(data.rayon, data.allee, data.etagere, data.casier);
       const { error } = await supabase
         .from('produits')
         .update({
@@ -542,7 +548,6 @@ export function DataProvider({ children }) {
           prix_vente: data.price,
           prix_grossiste: data.priceGrossiste,
           prix_revendeur: data.priceRevendeur,
-          stock: data.stock,
           emplacement_id: emplacementId
         })
         .eq('id', id);
@@ -573,10 +578,9 @@ export function DataProvider({ children }) {
 
   const deleteProduct = async (id) => {
     const { error } = await supabase.from('produits').delete().eq('id', id);
-    if (!error) {
-      setProducts(prev => prev.filter(p => p.id !== id));
-      logJournal('Produit', 'Produit supprimé', id);
-    }
+    if (error) throw error;
+    setProducts(prev => prev.filter(p => p.id !== id));
+    logJournal('Produit', 'Produit supprimé', id);
   };
 
   // ==========================================
@@ -624,10 +628,9 @@ export function DataProvider({ children }) {
 
   const deleteClient = async (id) => {
     const { error } = await supabase.from('clients').delete().eq('id', id);
-    if (!error) {
-      setClients(prev => prev.filter(c => c.id !== id));
-      logJournal('Client', 'Client supprimé', id);
-    }
+    if (error) throw error;
+    setClients(prev => prev.filter(c => c.id !== id));
+    logJournal('Client', 'Client supprimé', id);
   };
 
   // ==========================================
@@ -714,26 +717,32 @@ export function DataProvider({ children }) {
 
   const deleteSupplier = async (id) => {
     const { error } = await supabase.from('fournisseurs').delete().eq('id', id);
-    if (!error) setSuppliers(prev => prev.filter(s => s.id !== id));
+    if (error) throw error;
+    setSuppliers(prev => prev.filter(s => s.id !== id));
+    logJournal('Fournisseur', 'Fournisseur supprimé', id);
   };
 
   // ==========================================
   // EMPLACEMENTS (CRUD)
   // ==========================================
+  const locationLabel = (d) => [d.rayon, d.allee, d.etagere, d.casier].filter(Boolean).join(' / ');
+
   const addLocation = async (data) => {
     const { data: newDb, error } = await supabase
       .from('emplacements')
       .insert([{
         rayon: data.rayon,
         allee: data.allee,
-        etagere: data.etagere,
+        etagere: data.etagere || '',
+        casier: data.casier || '',
         description: data.description
       }])
       .select()
       .single();
-    if (!error && newDb) {
+    if (error) throw error;
+    if (newDb) {
       setLocations(prev => [...prev, newDb]);
-      logJournal('Emplacement', 'Nouvel emplacement', `${data.rayon}-${data.allee}-${data.etagere}`);
+      logJournal('Emplacement', 'Nouvel emplacement', locationLabel(data));
     }
   };
 
@@ -743,19 +752,21 @@ export function DataProvider({ children }) {
       .update({
         rayon: data.rayon,
         allee: data.allee,
-        etagere: data.etagere,
+        etagere: data.etagere || '',
+        casier: data.casier || '',
         description: data.description
       })
       .eq('id', id);
-    if (!error) {
-      setLocations(prev => prev.map(l => l.id === id ? { ...l, ...data } : l));
-      logJournal('Emplacement', 'Emplacement modifié', `${data.rayon}-${data.allee}-${data.etagere}`);
-    }
+    if (error) throw error;
+    setLocations(prev => prev.map(l => l.id === id ? { ...l, ...data } : l));
+    logJournal('Emplacement', 'Emplacement modifié', locationLabel(data));
   };
 
   const deleteLocation = async (id) => {
     const { error } = await supabase.from('emplacements').delete().eq('id', id);
-    if (!error) setLocations(prev => prev.filter(l => l.id !== id));
+    if (error) throw error;
+    setLocations(prev => prev.filter(l => l.id !== id));
+    logJournal('Emplacement', 'Emplacement supprimé', id);
   };
 
   // ==========================================
@@ -823,18 +834,17 @@ export function DataProvider({ children }) {
   const deleteLot = async (productId, lotId) => {
     const product = products.find(p => p.id === productId);
     const lot = product?.lots.find(l => l.id === lotId);
-    if (!lot || !lot._db_id) return;
+    if (!lot || !lot._db_id) throw new Error('Lot introuvable');
     const { error } = await supabase.from('lots').delete().eq('id', lot._db_id);
-    if (!error) {
-      setProducts(prev => prev.map(p => {
-        if (p.id === productId) {
-          const newLots = p.lots.filter(l => l.id !== lotId);
-          return { ...p, lots: newLots, stock: newLots.reduce((s, l) => s + l.stock, 0) };
-        }
-        return p;
-      }));
-      logJournal('Lot', 'Lot supprimé', lotId);
-    }
+    if (error) throw error;
+    setProducts(prev => prev.map(p => {
+      if (p.id === productId) {
+        const newLots = p.lots.filter(l => l.id !== lotId);
+        return { ...p, lots: newLots, stock: newLots.reduce((s, l) => s + l.stock, 0) };
+      }
+      return p;
+    }));
+    logJournal('Lot', 'Lot supprimé', lotId);
   };
 
   // ==========================================
@@ -1066,27 +1076,25 @@ export function DataProvider({ children }) {
    *    (c.-à-d. si le paiement avait été validé).
    */
   const deleteSale = async (id) => {
-    try {
-      const { data: currentSale, error: fetchErr } = await supabase
-        .from('ventes')
-        .select('*, lignes:lignes_vente(*)')
-        .eq('id', id)
-        .single();
-      if (fetchErr) throw fetchErr;
+    const { data: currentSale, error: fetchErr } = await supabase
+      .from('ventes')
+      .select('*, lignes:lignes_vente(*)')
+      .eq('id', id)
+      .single();
+    if (fetchErr) throw fetchErr;
 
-      if (currentSale?.stock_deduit) {
-        await restoreStockForLines(currentSale.lignes);
-        await reloadProducts();
-      }
+    // 1. Supprimer la vente : si cela échoue, le stock n'est pas touché
+    const { error } = await supabase.from('ventes').delete().eq('id', id);
+    if (error) throw error;
 
-      const { error } = await supabase.from('ventes').delete().eq('id', id);
-      if (error) throw error;
-
-      setSales(prev => prev.filter(s => s.id !== id));
-      logJournal('Vente', 'Vente supprimée', `${id} par ${profile?.name || 'Inconnu'}`);
-    } catch (err) {
-      console.error('Erreur deleteSale:', err);
+    // 2. Restituer le stock seulement si la vente l'avait déduit
+    if (currentSale?.stock_deduit) {
+      await restoreStockForLines(currentSale.lignes);
+      await reloadProducts();
     }
+
+    setSales(prev => prev.filter(s => s.id !== id));
+    logJournal('Vente', 'Vente supprimée', `${id} par ${profile?.name || 'Inconnu'}`);
   };
 
   // ==========================================
@@ -1165,10 +1173,9 @@ export function DataProvider({ children }) {
 
   const deletePurchase = async (id) => {
     const { error } = await supabase.from('achats').delete().eq('id', id);
-    if (!error) {
-      setPurchases(prev => prev.filter(p => p.id !== id));
-      logJournal('Achat', 'Achat supprimé', `${id} par ${profile?.name || 'Inconnu'}`);
-    }
+    if (error) throw error;
+    setPurchases(prev => prev.filter(p => p.id !== id));
+    logJournal('Achat', 'Achat supprimé', `${id} par ${profile?.name || 'Inconnu'}`);
   };
 
   // ==========================================

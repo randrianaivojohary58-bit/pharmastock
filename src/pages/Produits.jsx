@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { Plus, Edit, Trash2, Upload } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import ProductModal from '../components/modals/ProductModal';
 import ImportProductsModal from '../components/modals/ImportProductsModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import { formatMoney } from '../utils/format';
-import { getEmplacement } from '../utils/stock';
+import { formatEmplacement } from '../utils/emplacement';
 import { PRODUCT_TYPES } from '../utils/productTypes';
 
 export default function Produits() {
   const { products, deleteProduct } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -27,8 +30,14 @@ export default function Produits() {
   });
 
   const handleDelete = async () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const name = products.find(p => p.id === deleteId)?.name || deleteId;
+    try {
       await deleteProduct(deleteId);
+      showToast('Succès', `Produit « ${name} » supprimé`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'ce produit'), 'error');
+    } finally {
       setDeleteId(null);
     }
   };
@@ -122,7 +131,7 @@ export default function Produits() {
                     </strong>
                   </td>
                   <td className="px-4 py-3 text-emerald-700">
-                    {getEmplacement(p)}
+                    {formatEmplacement(p)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-center gap-1">
@@ -161,7 +170,7 @@ export default function Produits() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer le produit ?"
-        message={`Voulez-vous vraiment supprimer "${deleteId}" ?`}
+        message={`Voulez-vous vraiment supprimer « ${products.find(p => p.id === deleteId)?.name || deleteId} » ? Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />

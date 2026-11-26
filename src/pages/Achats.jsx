@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Eye, Edit, Trash2, ShoppingCart, User } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import MiniStat from '../components/common/MiniStat';
@@ -12,6 +14,7 @@ import { formatDate } from '../utils/dates';
 
 export default function Achats() {
   const { purchases, deletePurchase } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -30,8 +33,14 @@ export default function Achats() {
   }, 0);
 
   const handleDelete = async () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const number = purchases.find(p => p.id === deleteId)?.number || '';
+    try {
       await deletePurchase(deleteId);
+      showToast('Succès', `Achat ${number} supprimé`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'cet achat'), 'error');
+    } finally {
       setDeleteId(null);
     }
   };
@@ -152,7 +161,7 @@ export default function Achats() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer l'achat ?"
-        message="Voulez-vous vraiment supprimer cet achat ? Le stock sera ajusté."
+        message={`Voulez-vous vraiment supprimer l'achat ${purchases.find(p => p.id === deleteId)?.number || ''} ? Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />

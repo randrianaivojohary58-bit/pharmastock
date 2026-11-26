@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import LotModal from '../components/modals/LotModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import { formatDate, expiryStatus } from '../utils/dates';
-import { getEmplacement } from '../utils/stock';
+import { formatEmplacement } from '../utils/emplacement';
 
 export default function Lots() {
   const { products, deleteLot } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState({ productId: null, lotId: null });
@@ -28,8 +31,13 @@ export default function Lots() {
   );
 
   const handleDelete = async () => {
-    if (deleteInfo) {
+    if (!deleteInfo) return;
+    try {
       await deleteLot(deleteInfo.productId, deleteInfo.lotId);
+      showToast('Succès', `Lot « ${deleteInfo.lotId} » supprimé`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'ce lot'), 'error');
+    } finally {
       setDeleteInfo(null);
     }
   };
@@ -77,7 +85,7 @@ export default function Lots() {
                   <tr key={idx} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{lot.id}</td>
                     <td className="px-4 py-3"><strong>{product.name}</strong></td>
-                    <td className="px-4 py-3">{getEmplacement(product)}</td>
+                    <td className="px-4 py-3">{formatEmplacement(product)}</td>
                     <td className="px-4 py-3">{lot.stock} ctn</td>
                     <td className={`px-4 py-3 ${st.color}`}>{formatDate(lot.expiry)}</td>
                     {/* 👇 NOUVELLE VALEUR JOURS RESTANTS */}
@@ -121,7 +129,7 @@ export default function Lots() {
       <ConfirmModal
         isOpen={!!deleteInfo}
         title="Supprimer le lot ?"
-        message={`Supprimer le lot "${deleteInfo?.lotId}" ?`}
+        message={`Supprimer le lot « ${deleteInfo?.lotId} » de ${products.find(p => p.id === deleteInfo?.productId)?.name || 'ce produit'} ? Son stock sera retiré. Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteInfo(null)}
       />

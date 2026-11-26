@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, FileText, Edit, Trash2, DollarSign, User, Receipt } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import MiniStat from '../components/common/MiniStat';
@@ -14,6 +16,7 @@ import { saleTotal, saleRest, isCounted, isOverdue, todayStr } from '../utils/sa
 
 export default function Ventes() {
   const { sales, deleteSale } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [invoice, setInvoice] = useState(null);
@@ -34,8 +37,16 @@ export default function Ventes() {
   const totalRest = sales.reduce((a, s) => a + saleRest(s), 0);
 
   const handleDelete = async () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const target = sales.find(s => s.id === deleteId);
+    try {
       await deleteSale(deleteId);
+      showToast('Succès', target?.stockDeduit
+        ? `Vente ${target.number} supprimée — stock restitué`
+        : `Vente ${target?.number || ''} supprimée`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'cette vente'), 'error');
+    } finally {
       setDeleteId(null);
     }
   };
@@ -131,12 +142,7 @@ export default function Ventes() {
                       </td>
                       <td className="px-4 py-3 text-gray-600">{productsList.length} produit(s)</td>
                       <td className="px-4 py-3 font-bold">{cartonsCount}</td>
-                      <td className="px-4 py-3 font-bold text-emerald-700">
-                        {formatMoney(total)}
-                        {sale.remiseRate > 0 && (
-                          <span className="block text-[10px] font-semibold text-orange-600">Remise -{sale.remiseRate} %</span>
-                        )}
-                      </td>
+                      <td className="px-4 py-3 font-bold text-emerald-700">{formatMoney(total)}</td>
                       <td className={`px-4 py-3 font-bold ${rest > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
                         {rest > 0 ? formatMoney(rest) : '—'}
                       </td>
@@ -214,7 +220,7 @@ export default function Ventes() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer la vente ?"
-        message="Voulez-vous vraiment supprimer cette vente ? Le stock sera restitué s'il a déjà été déduit."
+        message={`Supprimer la vente ${sales.find(s => s.id === deleteId)?.number || ''} ? Le stock sera restitué s'il a déjà été déduit. Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />

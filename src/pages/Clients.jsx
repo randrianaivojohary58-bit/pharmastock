@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Edit, Trash2, Star } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
+import { friendlyDeleteError } from '../utils/Errors';
 import PageHeader from '../components/common/PageHeader';
 import SearchBar from '../components/common/SearchBar';
 import ClientModal from '../components/modals/ClientModal';
@@ -10,6 +12,7 @@ import { saleRest, isOverdue, CREDIT_DAYS } from '../utils/salesStats';
 
 export default function Clients() {
   const { clients, sales, deleteClient } = useData();
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -22,8 +25,14 @@ export default function Clients() {
   });
 
   const handleDelete = async () => {
-    if (deleteId) {
+    if (!deleteId) return;
+    const name = clients.find(c => c.id === deleteId)?.name || 'Client';
+    try {
       await deleteClient(deleteId);
+      showToast('Succès', `Client « ${name} » supprimé`);
+    } catch (err) {
+      showToast('Erreur', friendlyDeleteError(err, 'ce client'), 'error');
+    } finally {
       setDeleteId(null);
     }
   };
@@ -111,7 +120,7 @@ export default function Clients() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Supprimer le client ?"
-        message="Voulez-vous vraiment supprimer ce client ?"
+        message={`Voulez-vous vraiment supprimer « ${clients.find(c => c.id === deleteId)?.name || 'ce client'} » ? Cette action est irréversible.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />

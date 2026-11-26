@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { getEmplacement } from '../../utils/stock';
+import { formatEmplacement } from '../../utils/emplacement';
 import { SEUIL_STOCK_BAS } from '../../utils/salesStats';
 
 export default function StockAlerts({ products }) {
@@ -41,7 +41,7 @@ export default function StockAlerts({ products }) {
                 return (
                   <tr key={p.id} className="border-t border-gray-100">
                     <td className="px-4 py-2 text-gray-800">{p.name}</td>
-                    <td className="px-4 py-2 text-gray-600">{getEmplacement(p)}</td>
+                    <td className="px-4 py-2 text-gray-600">{formatEmplacement(p)}</td>
                     <td className={`px-4 py-2 text-right font-semibold ${out ? 'text-red-600' : 'text-orange-600'}`}>{p.stock || 0} ctn</td>
                     <td className="px-4 py-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${out ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>

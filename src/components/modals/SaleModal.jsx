@@ -375,7 +375,7 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
         </>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         {isMagasinier && !isEdit && (
           <div className="bg-orange-50 border border-orange-200 text-orange-800 text-xs p-3 rounded-xl flex gap-2">
             <Clock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -395,10 +395,10 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-5">
           {isCaisseMode ? (
             <div>
-              <label className="block text-xs font-medium mb-1.5">Client</label>
+              <label className="block text-xs font-medium mb-2">Client</label>
               <div className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-lg text-xs flex items-center font-semibold text-gray-700">
                 {form.client}
               </div>
@@ -408,7 +408,7 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
           )}
 
           <div>
-            <label className="block text-xs font-medium mb-1.5">Date vente *</label>
+            <label className="block text-xs font-medium mb-2">Date vente *</label>
             <input
               type="date"
               value={form.date}
@@ -451,13 +451,13 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1.5">Paiement</label>
+                <label className="block text-xs font-medium mb-2">Paiement</label>
                 <select value={form.payment} onChange={(e) => handlePaymentChange(e.target.value)} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs">
                   <option>Espèces</option><option>Virement</option><option>Chèque</option><option>Mobile Money</option><option>Crédit</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5">{isCredit ? 'Acompte payé (facultatif)' : 'Montant payé'}</label>
+                <label className="block text-xs font-medium mb-2">{isCredit ? 'Acompte payé (facultatif)' : 'Montant payé'}</label>
                 <input
                   type="number"
                   value={form.paid}
@@ -468,7 +468,7 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1.5">Remise (%)</label>
+                <label className="block text-xs font-medium mb-2">Remise (%)</label>
                 <input
                   type="number" min={0} max={100} step="0.5"
                   value={form.remise}
@@ -519,13 +519,13 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
         </div>
 
         <div>
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex justify-between items-center mb-3">
             <h4 className="text-xs font-bold">Produits</h4>
             {!isCaisseMode && (
               <button onClick={addLine} className="text-xs text-emerald-600 font-semibold hover:underline">+ Ajouter</button>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {form.lines.map((line, i) => {
               const product = products.find(p => p.id === line.productId);
               const lots = product?.lots.filter(l => l.stock > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry)) || [];
@@ -544,14 +544,14 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
               }
 
               return (
-                <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                <div key={i} className="grid grid-cols-12 gap-3 items-start">
                   <div className="col-span-4">
-                    <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs">
+                    <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs">
                       <option value="">Sélectionner</option>
                       {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                     {product && (
-                      <div className="mt-1 text-[10px] text-gray-500">
+                      <div className="mt-1.5 text-[10px] text-gray-500">
                         Stock: <strong className="text-emerald-700">{info.stock}</strong> · Dispo: <strong className={info.available === 0 ? 'text-red-600' : 'text-emerald-700'}>{info.available}</strong>
                       </div>
                     )}
@@ -559,11 +559,11 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
 
                   <div className="col-span-3">
                     {product && !info.hasLots ? (
-                      <div className="w-full h-9 px-2 border border-red-200 bg-red-50 rounded-lg text-[10px] text-red-600 font-bold flex items-center gap-1">
+                      <div className="w-full h-10 px-3 border border-red-200 bg-red-50 rounded-lg text-[10px] text-red-600 font-bold flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" /> Épuisé
                       </div>
                     ) : (
-                      <select value={line.lot || ''} onChange={(e) => updateLine(i, 'lot', e.target.value)} className="w-full h-9 px-2 border border-gray-200 rounded-lg text-xs" disabled={!product}>
+                      <select value={line.lot || ''} onChange={(e) => updateLine(i, 'lot', e.target.value)} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs" disabled={!product}>
                         <option value="">Lot FEFO</option>
                         {lots.map(l => (
                           <option key={l.id} value={l.id}>
@@ -579,20 +579,20 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
                       type="number" min={1} max={info.lotStock}
                       value={line.quantity}
                       onChange={(e) => updateLine(i, 'quantity', Number(e.target.value))}
-                      className={`w-full h-9 px-2 border rounded-lg text-xs ${line.quantity > info.lotStock ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                      className={`w-full h-10 px-3 border rounded-lg text-xs ${line.quantity > info.lotStock ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                     />
                   </div>
-                  <div className="col-span-2 pt-2">
+                  <div className="col-span-2 pt-3">
                     <span className="text-xs font-bold text-emerald-700">{formatMoney(info.total)}</span>
                   </div>
-                  <button onClick={() => removeLine(i)} className="col-span-1 h-9 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100">×</button>
+                  <button onClick={() => removeLine(i)} className="col-span-1 h-10 bg-red-50 text-red-600 rounded-lg text-xs hover:bg-red-100">×</button>
                 </div>
               );
             })}
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs">
+        <div className="bg-gray-50 rounded-xl p-5 space-y-3 text-xs">
           <div className="flex justify-between"><span>Sous-total HT</span><strong>{formatMoney(subtotalHT)}</strong></div>
           {remiseRate > 0 && (
             <div className="flex justify-between text-orange-600">

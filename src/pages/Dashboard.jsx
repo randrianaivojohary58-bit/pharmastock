@@ -66,7 +66,7 @@ export default function Dashboard() {
                 onClick={() => navigate('/produits')}
                 className="h-9 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" /> Ajouter produit
+                <Plus className="w-4 h-4" /> Nouveau produit
               </button>
             </>
           )}
@@ -103,7 +103,7 @@ export default function Dashboard() {
           limit={8}
           seeAllPath={canCash ? '/caisse' : '/ventes'}
           seeAllLabel={canCash ? 'Aller à la caisse' : 'Voir les ventes'}
-          emptyText="Aucune proforma en attente ✓"
+          emptyText="Aucune proforma en attente"
         />
       </div>
 

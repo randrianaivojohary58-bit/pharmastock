@@ -5,36 +5,58 @@ import { PRODUCT_TYPES } from './productTypes';
 export const TYPES = PRODUCT_TYPES;
 export const CONDS = ['Chassie (carton)', 'Boîte', 'Flacon', 'Tube', 'Sachet', 'Ampoule', 'Pot', 'Blister', 'Étui'];
 
+// Rôles possibles d'une colonne
+export const FIELD_OPTIONS = [
+  { key: '', label: '— Ignorer —' },
+  { key: 'name', label: 'Nom du produit' },
+  { key: 'code', label: 'Code' },
+  { key: 'type', label: 'Type' },
+  { key: 'conditionnement', label: 'Conditionnement' },
+  { key: 'category', label: 'Gamme / catégorie' },
+  { key: 'tva', label: 'TVA' },
+  { key: 'buyPrice', label: "Prix d'achat" },
+  { key: 'price', label: 'Prix de vente' },
+  { key: 'priceGrossiste', label: 'Prix grossiste' },
+  { key: 'priceRevendeur', label: 'Prix revendeur' },
+  { key: 'rayon', label: 'Pièce' },
+  { key: 'allee', label: 'Équipement' },
+  { key: 'etagere', label: 'Niveau' },
+  { key: 'casier', label: 'Case' }
+];
+
 // Normalise un texte : sans accents, minuscules, sans espaces ni symboles
 const strip = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-// Noms de colonnes acceptés (on tolère plusieurs écritures)
-const HEADER_ALIASES = {
-  code: 'code', reference: 'code', ref: 'code',
-  nom: 'name', name: 'name', produit: 'name', designation: 'name', libelle: 'name',
-  type: 'type', forme: 'type',
-  conditionnement: 'conditionnement', cond: 'conditionnement',
-  gamme: 'category', categorie: 'category', category: 'category', famille: 'category',
-  tva: 'tva',
-  prixachat: 'buyPrice', achat: 'buyPrice', pa: 'buyPrice',
-  prixvente: 'price', vente: 'price', pv: 'price', prixdetail: 'price',
-  prixgrossiste: 'priceGrossiste', grossiste: 'priceGrossiste',
-  prixrevendeur: 'priceRevendeur', revendeur: 'priceRevendeur',
-  rayon: 'rayon', allee: 'allee', etagere: 'etagere'
+// Rôle d'une colonne d'après son titre (on tolère plusieurs écritures)
+const headerKey = (h) => {
+  const k = strip(h);
+  if (!k) return null;
+  if (k.includes('grossiste')) return 'priceGrossiste';
+  if (k.includes('revendeur')) return 'priceRevendeur';
+  if (k.includes('achat') || k === 'pa' || k.includes('cout')) return 'buyPrice';
+  if (k.includes('vente') || k.includes('prix') || k === 'pv' || k.includes('tarif')) return 'price';
+  if (k.includes('code') || k.startsWith('ref')) return 'code';
+  if (k.includes('design') || k.includes('libelle') || k.includes('nom') || k.includes('produit') || k.includes('article') || k.includes('medicament')) return 'name';
+  if (k.includes('condition') || k === 'cond') return 'conditionnement';
+  if (k.includes('gamme') || k.includes('categor') || k.includes('famille')) return 'category';
+  if (k.includes('tva')) return 'tva';
+  if (k === 'type' || k.includes('forme')) return 'type';
+  if (k.includes('piece') || k.includes('rayon')) return 'rayon';
+  if (k.includes('equipement') || k.includes('allee')) return 'allee';
+  if (k.includes('niveau') || k.includes('etagere')) return 'etagere';
+  if (k === 'case' || k.includes('casier')) return 'casier';
+  return null;
 };
 
-// Ordre des colonnes si le texte collé n'a pas de ligne d'en-tête
-const DEFAULT_ORDER = ['code', 'name', 'type', 'conditionnement', 'category', 'tva', 'buyPrice', 'price', 'priceGrossiste', 'priceRevendeur', 'rayon', 'allee', 'etagere'];
-
-// ---------- Lecture du texte (collé depuis Excel ou fichier CSV) ----------
+// ---------- Lecture du texte (collé depuis Excel, fichier CSV ou feuille Excel) ----------
 const detectDelimiter = (text) => {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   const first = lines[0] || '';
   const candidates = ['\t', ';', ','].filter(d => first.includes(d));
 
-  // 1. Un séparateur qui donne une ligne d'en-tête reconnue (nom, type, prix_achat...)
+  // 1. Un séparateur qui donne une ligne de titres reconnue
   for (const d of candidates) {
-    if (first.split(d).some(h => HEADER_ALIASES[strip(h)])) return d;
+    if (first.split(d).some(h => headerKey(h))) return d;
   }
   // 2. Tabulation : texte copié depuis Excel
   if (first.includes('\t')) return '\t';
@@ -43,7 +65,7 @@ const detectDelimiter = (text) => {
     const n = first.split(d).length;
     if (lines.every(l => l.split(d).length === n)) return d;
   }
-  // 4. Une seule colonne : simple liste de noms (une virgule dans un nom ne coupe plus la colonne)
+  // 4. Une seule colonne : simple liste de noms
   return '\u0000';
 };
 
@@ -67,7 +89,77 @@ const parseTable = (text, delim) => {
   }
   row.push(cur);
   rows.push(row);
-  return rows.filter(r => r.some(v => String(v).trim() !== ''));
+  return rows.filter(r => r.some(v => String(v).trim() !== '')).map(r => r.map(v => String(v).trim()));
+};
+
+// Texte -> tableau de cellules
+export const readTable = (text) => {
+  const clean = String(text || '').replace(/^\uFEFF/, '');
+  if (!clean.trim()) return [];
+  return parseTable(clean, detectDelimiter(clean));
+};
+
+const NUMERIC = /^[\d\s.,]+(ar|mga)?$/i;
+const columnStats = (table, col, startRow) => {
+  const vals = table.slice(startRow, startRow + 40).map(r => r[col] || '').filter(Boolean);
+  if (!vals.length) return { numeric: 0, type: 0, cond: 0 };
+  const ratio = (fn) => vals.filter(fn).length / vals.length;
+  return {
+    numeric: ratio(v => NUMERIC.test(v)),
+    type: ratio(v => TYPES.some(t => strip(t) === strip(v))),
+    cond: ratio(v => CONDS.some(c => strip(c) === strip(v)))
+  };
+};
+
+// Devine le rôle de chaque colonne : d'après les titres, sinon d'après le contenu
+export const guessMapping = (table) => {
+  if (!table.length) return { map: [], hasHeader: false };
+  const cols = Math.max(...table.slice(0, 40).map(r => r.length));
+  const headerKeys = Array.from({ length: cols }, (_, i) => headerKey(table[0][i]));
+  const hasHeader = headerKeys.some(Boolean);
+
+  const map = Array.from({ length: cols }, () => null);
+  const used = new Set();
+  const assign = (i, key) => { if (key && !used.has(key)) { map[i] = key; used.add(key); } };
+
+  if (hasHeader) headerKeys.forEach((k, i) => assign(i, k));
+
+  const start = hasHeader ? 1 : 0;
+  const stats = Array.from({ length: cols }, (_, i) => columnStats(table, i, start));
+
+  // Colonne du nom : la première colonne de texte non encore utilisée
+  if (!used.has('name')) {
+    const idx = stats.findIndex((s, i) => map[i] === null && s.numeric < 0.5 && s.type < 0.5 && s.cond < 0.5);
+    if (idx >= 0) assign(idx, 'name');
+  }
+
+  if (!hasHeader) {
+    // Sans titres : on reconnaît type, conditionnement et prix d'après le contenu
+    stats.forEach((s, i) => {
+      if (map[i] !== null) return;
+      if (s.type >= 0.5) assign(i, 'type');
+      else if (s.cond >= 0.5) assign(i, 'conditionnement');
+      else if (s.numeric >= 0.5) assign(i, 'price');   // 1er nombre = prix de vente (modifiable)
+    });
+  }
+  return { map, hasHeader };
+};
+
+// Tableau + rôles des colonnes -> lignes brutes
+export const rowsFromTable = (table, map, hasHeader) => {
+  const body = hasHeader ? table.slice(1) : table;
+  return body.map((cells, i) => {
+    const raw = {};
+    map.forEach((k, idx) => { if (k) raw[k] = String(cells[idx] ?? '').trim(); });
+    return { line: i + (hasHeader ? 2 : 1), raw };
+  });
+};
+
+// Compatibilité : texte -> lignes brutes avec les rôles devinés
+export const parseProductText = (text) => {
+  const table = readTable(text);
+  const { map, hasHeader } = guessMapping(table);
+  return rowsFromTable(table, map, hasHeader);
 };
 
 // "6 000 Ar" -> 6000 ; "2,5" -> 2.5 ; "1.500,50" -> 1500.5
@@ -92,63 +184,25 @@ const matchList = (value, list, fallback) => {
   return fallback;
 };
 
-// Sans en-tête, on attend "code puis nom". Mais beaucoup de fichiers Excel ont "nom puis code"
-// (ex. « ACIVIR CREME 15G » | « 1160 »). On compare le contenu des deux premières colonnes.
-const looksLikeName = (v) => /[A-Za-zÀ-ÿ]{3,}/.test(v) && (/\s/.test(v) || v.length > 12);
-const looksLikeCode = (v) => v !== '' && !/\s/.test(v) && v.length <= 20 && !looksLikeName(v);
-
-const columnsAreSwapped = (table) => {
-  const sample = table.slice(0, 30).filter(r => String(r[0] ?? '').trim() && String(r[1] ?? '').trim());
-  if (!sample.length) return false;
-  const swapped = sample.filter(r => looksLikeName(String(r[0]).trim()) && looksLikeCode(String(r[1]).trim())).length;
-  return swapped / sample.length >= 0.6;
-};
-
-// Texte -> lignes brutes { line, raw: { name, type, ... } }
-export const parseProductText = (text) => {
-  const clean = String(text || '').replace(/^\uFEFF/, '');
-  if (!clean.trim()) return [];
-  const table = parseTable(clean, detectDelimiter(clean));
-  if (!table.length) return [];
-
-  const headerKeys = table[0].map(h => HEADER_ALIASES[strip(h)] || null);
-  const hasHeader = headerKeys.some(Boolean);
-
-  let keys;
-  if (hasHeader) keys = headerKeys;
-  else if (table[0].length === 1) keys = ['name'];          // simple liste de noms
-  else keys = DEFAULT_ORDER.slice(0, table[0].length);
-
-  // Sans en-tête : 1re colonne = noms et 2e = codes -> on inverse code / nom
-  if (!hasHeader && keys[0] === 'code' && keys[1] === 'name' && columnsAreSwapped(table)) {
-    keys = ['name', 'code', ...keys.slice(2)];
-  }
-
-  const body = hasHeader ? table.slice(1) : table;
-  return body.map((cells, i) => {
-    const raw = {};
-    keys.forEach((k, idx) => { if (k) raw[k] = String(cells[idx] ?? '').trim(); });
-    return { line: i + (hasHeader ? 2 : 1), raw };
-  });
-};
-
 // Lignes brutes -> produits prêts à importer, avec statut (ok / ignoré / erreur)
-export const normalizeProductRows = (parsed, existingProducts) => {
+// options.nameAsCode : le nom du produit sert de code quand le code est vide
+// options.defaultType : type appliqué quand il est vide ou inconnu
+export const normalizeProductRows = (parsed, existingProducts, options = {}) => {
   const seenNames = new Set();
   const seenCodes = new Set();
   const key = (name, cond) => `${strip(name)}|${strip(cond)}`;
   const existingKeys = new Set(existingProducts.map(p => key(p.name, p.conditionnement || '')));
   const existingCodes = new Set(existingProducts.map(p => p.id));
+  const typeFallback = options.defaultType || (TYPES.includes('Autre') ? 'Autre' : TYPES[0]);
 
   return parsed.map(({ line, raw }) => {
-    const name = (raw.name || '').trim();
-    // Type non reconnu -> 'Autre' si la liste le contient, sinon le premier type (signalé dans l'aperçu)
-    const typeFallback = TYPES.includes('Autre') ? 'Autre' : TYPES[0];
+    const name = (raw.name || '').replace(/\s+/g, ' ').trim();
     const matchedType = matchList(raw.type, TYPES, null);
     const type = matchedType || typeFallback;
     const typeNote = raw.type && !matchedType ? `Type « ${raw.type} » inconnu → ${type}` : '';
     const conditionnement = matchList(raw.conditionnement, CONDS, 'Boîte');
-    const code = (raw.code || '').trim();
+    let code = (raw.code || '').trim();
+    if (!code && options.nameAsCode) code = name;
 
     const buyPrice = toNumber(raw.buyPrice);
     let price = toNumber(raw.price);
@@ -173,7 +227,7 @@ export const normalizeProductRows = (parsed, existingProducts) => {
       code, name, type, conditionnement,
       category: (raw.category || '').trim(),
       tva, buyPrice, price, priceGrossiste, priceRevendeur,
-      rayon: (raw.rayon || '').trim(), allee: (raw.allee || '').trim(), etagere: (raw.etagere || '').trim()
+      rayon: (raw.rayon || '').trim(), allee: (raw.allee || '').trim(), etagere: (raw.etagere || '').trim(), casier: (raw.casier || '').trim()
     };
 
     let status = 'ok';
@@ -196,10 +250,10 @@ export const normalizeProductRows = (parsed, existingProducts) => {
 // Modèle téléchargeable (séparateur ";" + BOM : s'ouvre correctement dans Excel en français)
 export const downloadTemplate = () => {
   const lines = [
-    'code;nom;type;conditionnement;gamme;tva;prix_achat;prix_vente;prix_grossiste;prix_revendeur;rayon;allee;etagere',
-    ';Paracétamol 500 mg;Comprimé;Boîte;Antalgiques;20;2000;2400;2200;2300;A;1;2',
-    ';Amoxicilline 1 g;Comprimé;Boîte;Antibiotiques;20;;;;;;;',
-    ';Vitamine C injectable;Injectable;Boîte;Vitamines;20;;;;;;;'
+    'code;nom;type;conditionnement;gamme;tva;prix_achat;prix_vente;prix_grossiste;prix_revendeur;piece;equipement;niveau;case',
+    ';Paracétamol 500 mg;Comprimé;Boîte;Antalgiques;20;2000;2400;2200;2300;Pièce 2;Étagère murale 02;Niveau 03;Case 01',
+    ';Amoxicilline 1 g;Comprimé;Boîte;Antibiotiques;20;;;;;;;;;',
+    ';Vitamine C injectable;Injectable;Boîte;Vitamines;20;;;;;;;;;'
   ];
   const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
