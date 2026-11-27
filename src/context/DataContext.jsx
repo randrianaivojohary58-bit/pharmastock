@@ -23,6 +23,7 @@ const mapProductRow = (p) => ({
     id: l.numero_lot,
     expiry: l.date_expiration,
     stock: l.quantite,
+    promoRate: Number(l.promo_pourcentage) || 0,
     _db_id: l.id
   }))
 });
@@ -99,8 +100,9 @@ export function DataProvider({ children }) {
       return;
     }
 
-    async function loadAllData() {
-      setLoading(true);
+    // silent = true : rechargement en arrière-plan (sans écran de chargement)
+    async function loadAllData(silent = false) {
+      if (!silent) setLoading(true);
       try {
         const { data: settingsData } = await supabase
           .from('settings').select('data').eq('id', 1).single();
@@ -186,10 +188,52 @@ export function DataProvider({ children }) {
       } catch (error) {
         console.error('Erreur de chargement:', error);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     }
     loadAllData();
+
+    // ==========================================
+    // ACTUALISATION AUTOMATIQUE (temps réel)
+    // À chaque mouvement dans la base (vente, lot, achat, stock...),
+    // les données sont rechargées automatiquement, sans toucher à la page.
+    // ==========================================
+    let timer = null;
+    const scheduleRefresh = () => {
+      clearTimeout(timer);
+      // Regroupe plusieurs changements rapprochés en un seul rechargement
+      timer = setTimeout(() => loadAllData(true), 800);
+    };
+
+    const WATCHED_TABLES = [
+      'produits', 'lots', 'emplacements',
+      'ventes', 'lignes_vente',
+      'achats', 'lignes_achat',
+      'clients', 'fournisseurs',
+      'inventaires', 'journal'
+    ];
+
+    let channel = supabase.channel(`donnees-${profile.username}`);
+    WATCHED_TABLES.forEach(table => {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        scheduleRefresh
+      );
+    });
+    channel.subscribe();
+
+    // Filet de sécurité : recharge quand on revient sur l'onglet
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      supabase.removeChannel(channel);
+    };
     // Recharge à chaque connexion / changement d'utilisateur
   }, [profile?.username]);
 
@@ -772,6 +816,15 @@ export function DataProvider({ children }) {
   // ==========================================
   // LOTS (CRUD)
   // ==========================================
+  // Garde produits.stock synchronisé avec la somme des lots (sinon le tableau Produits affiche 0 après rechargement)
+  const syncProductStock = async (productId, totalStock) => {
+    const { error } = await supabase
+      .from('produits')
+      .update({ stock: totalStock })
+      .eq('id', productId);
+    if (error) throw error;
+  };
+
   const addLot = async (data) => {
     const { data: newDb, error } = await supabase
       .from('lots')
@@ -779,11 +832,17 @@ export function DataProvider({ children }) {
         produit_id: data.productId,
         numero_lot: data.lotNumber,
         quantite: data.quantity,
-        date_expiration: data.expiry
+        date_expiration: data.expiry,
+        promo_pourcentage: Number(data.promoRate) || 0
       }])
       .select()
       .single();
-    if (!error && newDb) {
+    if (error) throw error;
+    if (newDb) {
+      const current = products.find(p => p.id === data.productId);
+      const newTotal = (current?.lots || []).reduce((s, l) => s + (l.stock || 0), 0) + (newDb.quantite || 0);
+      await syncProductStock(data.productId, newTotal);
+
       setProducts(prev => prev.map(p => {
         if (p.id === data.productId) {
           const newLots = [
@@ -792,6 +851,7 @@ export function DataProvider({ children }) {
               id: newDb.numero_lot,
               expiry: newDb.date_expiration,
               stock: newDb.quantite,
+              promoRate: Number(newDb.promo_pourcentage) || 0,
               _db_id: newDb.id
             }
           ];
@@ -812,15 +872,22 @@ export function DataProvider({ children }) {
       .update({
         numero_lot: data.lotNumber,
         quantite: data.quantity,
-        date_expiration: data.expiry
+        date_expiration: data.expiry,
+        promo_pourcentage: Number(data.promoRate) || 0
       })
       .eq('id', lot._db_id);
-    if (!error) {
+    if (error) throw error;
+    {
+      const newTotal = product.lots.reduce(
+        (sum, l) => sum + (l.id === lotId ? (data.quantity || 0) : (l.stock || 0)), 0
+      );
+      await syncProductStock(productId, newTotal);
+
       setProducts(prev => prev.map(p => {
         if (p.id === productId) {
           const newLots = p.lots.map(l =>
             l.id === lotId
-              ? { ...l, id: data.lotNumber, stock: data.quantity, expiry: data.expiry }
+              ? { ...l, id: data.lotNumber, stock: data.quantity, expiry: data.expiry, promoRate: Number(data.promoRate) || 0 }
               : l
           );
           return { ...p, lots: newLots, stock: newLots.reduce((s, l) => s + l.stock, 0) };
@@ -837,6 +904,10 @@ export function DataProvider({ children }) {
     if (!lot || !lot._db_id) throw new Error('Lot introuvable');
     const { error } = await supabase.from('lots').delete().eq('id', lot._db_id);
     if (error) throw error;
+    await syncProductStock(
+      productId,
+      product.lots.filter(l => l.id !== lotId).reduce((sum, l) => sum + (l.stock || 0), 0)
+    );
     setProducts(prev => prev.map(p => {
       if (p.id === productId) {
         const newLots = p.lots.filter(l => l.id !== lotId);

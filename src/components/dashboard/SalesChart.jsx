@@ -95,13 +95,13 @@ export default function SalesChart({ sales }) {
       <div className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100">
         <div>
           <h3 className="text-sm font-bold text-gray-800">Évolution des ventes</h3>
-          <span className="text-xs text-gray-500">Visualisez vos revenus</span>
+          <span className="text-xs text-gray-500">Chiffre d'affaires TTC des ventes encaissées</span>
         </div>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
           {/* Total de la période */}
           <div className="text-left sm:text-right">
-            <span className="block text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Total Période</span>
+            <span className="block text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Total période</span>
             <strong className="text-lg font-bold text-emerald-700">{formatMoney(totalPeriod)}</strong>
           </div>
 

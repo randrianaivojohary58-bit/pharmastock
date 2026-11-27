@@ -11,6 +11,7 @@ import ConfirmModal from '../components/common/ConfirmModal';
 import { formatMoney } from '../utils/format';
 import { formatEmplacement } from '../utils/emplacement';
 import { PRODUCT_TYPES } from '../utils/productTypes';
+import { typeColor, getPromoInfo } from '../utils/productDisplay';
 
 export default function Produits() {
   const { products, deleteProduct } = useData();
@@ -22,12 +23,15 @@ export default function Produits() {
   const [editProduct, setEditProduct] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
 
-  const filtered = products.filter(p => {
-    const matchSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.id.toLowerCase().includes(search.toLowerCase());
-    return matchSearch && (!filterType || p.type === filterType);
-  });
+  // Liste triée par ordre alphabétique du nom (accents et majuscules ignorés, chiffres dans l'ordre)
+  const filtered = products
+    .filter(p => {
+      const matchSearch =
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.id.toLowerCase().includes(search.toLowerCase());
+      return matchSearch && (!filterType || p.type === filterType);
+    })
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base', numeric: true }));
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -94,8 +98,9 @@ export default function Produits() {
                 <th className="px-4 py-3 text-left font-bold text-gray-600">Prix vente</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">P. Grossiste</th>
                 <th className="px-4 py-3 text-left font-bold text-gray-600">P. Revendeur</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Stock</th>
-                <th className="px-4 py-3 text-left font-bold text-gray-600">Emplacement</th>
+                <th className="px-4 py-3 text-left font-bold text-emerald-800 bg-emerald-100" title="Modifiable depuis la page Lots">Stock</th>
+                <th className="px-4 py-3 text-left font-bold text-orange-800 bg-orange-100" title="Modifiable depuis la page Lots">Promo</th>
+                <th className="px-4 py-3 text-left font-bold text-sky-800 bg-sky-100" title="Modifiable depuis la page Lots">Emplacement</th>
                 <th className="px-4 py-3 text-center font-bold text-gray-600">Actions</th>
               </tr>
             </thead>
@@ -111,7 +116,7 @@ export default function Produits() {
                   <td className="px-4 py-3">
                     <strong>{p.name}</strong>
                   </td>
-                  <td className="px-4 py-3">{p.type}</td>
+                  <td className={`px-4 py-3 font-semibold ${typeColor(p.type)}`}>{p.type || '—'}</td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-semibold border border-emerald-100">
                       {p.conditionnement || '—'}
@@ -125,12 +130,28 @@ export default function Produits() {
                   <td className="px-4 py-3 text-gray-600">
                     {formatMoney(p.priceRevendeur || p.price)}
                   </td>
-                  <td className="px-4 py-3">
-                    <strong className={p.stock < 5 ? 'text-orange-500' : ''}>
-                      {p.stock} ctn
+                  <td className="px-4 py-3 bg-emerald-50">
+                    <strong className={(p.stock || 0) <= 0 ? 'text-red-600' : p.stock < 5 ? 'text-orange-600' : 'text-emerald-800'}>
+                      {p.stock || 0} ctn
                     </strong>
                   </td>
-                  <td className="px-4 py-3 text-emerald-700">
+                  <td className="px-4 py-3 bg-orange-50">
+                    {(() => {
+                      const promo = getPromoInfo(p);
+                      if (!promo) return <span className="text-gray-400">—</span>;
+                      return (
+                        <span title={promo.detail} className="inline-flex items-center gap-1">
+                          <span className="px-2 py-1 bg-orange-500 text-white rounded-full text-[10px] font-bold">
+                            -{promo.max}%
+                          </span>
+                          {promo.count > 1 && (
+                            <span className="text-[10px] text-orange-700 font-semibold">{promo.count} lots</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 bg-sky-50 text-sky-800 font-medium">
                     {formatEmplacement(p)}
                   </td>
                   <td className="px-4 py-3">

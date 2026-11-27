@@ -18,6 +18,8 @@ export default function Dashboard() {
 
   const userRole = profile?.roleKey || 'caissier';
   const canCash = userRole === 'admin' || userRole === 'caissier';
+  // Le caissier encaisse : il ne crée pas de nouvelle vente
+  const canCreateSale = userRole !== 'caissier';
 
   // Seules les ventes encaissées (Payée / Partielle) comptent dans le CA, le graphique et le top produits
   const countedSales = sales.filter(isCounted);
@@ -40,12 +42,14 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => navigate('/ventes')}
-            className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2"
-          >
-            <ShoppingCart className="w-4 h-4" /> {userRole === 'magasinier' ? 'Nouvelle proforma' : 'Nouvelle vente'}
-          </button>
+          {canCreateSale && (
+            <button
+              onClick={() => navigate('/ventes')}
+              className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2"
+            >
+              <ShoppingCart className="w-4 h-4" /> {userRole === 'magasinier' ? 'Nouvelle proforma' : 'Nouvelle vente'}
+            </button>
+          )}
           {canCash && (
             <button
               onClick={() => navigate('/caisse')}

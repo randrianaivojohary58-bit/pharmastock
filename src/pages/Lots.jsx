@@ -26,9 +26,21 @@ export default function Lots() {
   });
   allLots.sort((a, b) => new Date(a.lot.expiry) - new Date(b.lot.expiry));
 
+  const q = search.trim().toLowerCase();
+  const matches = (...values) => !q || values.some(v => String(v || '').toLowerCase().includes(q));
+
+  // Recherche sur le produit (nom, code, DCI, code-barres) ET sur le numéro de lot
   const filtered = allLots.filter(l =>
-    l.product.name.toLowerCase().includes(search.toLowerCase()) || l.lot.id.toLowerCase().includes(search.toLowerCase())
+    matches(l.product.name, l.product.id, l.product.dci, l.product.barcode, l.lot.id)
   );
+
+  // Produits trouvés mais sans lot en stock (sinon ils sont invisibles dans la liste)
+  const productsWithoutLot = q
+    ? products.filter(p =>
+        !(p.lots || []).some(l => l.stock > 0) &&
+        matches(p.name, p.id, p.dci, p.barcode)
+      )
+    : [];
 
   const handleDelete = async () => {
     if (!deleteInfo) return;
@@ -83,7 +95,14 @@ export default function Lots() {
                 
                 return (
                   <tr key={idx} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-emerald-700 font-bold">{lot.id}</td>
+                    <td className="px-4 py-3 font-mono text-emerald-700 font-bold">
+                      {lot.id}
+                      {lot.promoRate > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[9px] font-bold font-sans">
+                          PROMO -{lot.promoRate}%
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><strong>{product.name}</strong></td>
                     <td className="px-4 py-3">{formatEmplacement(product)}</td>
                     <td className="px-4 py-3">{lot.stock} ctn</td>
@@ -120,6 +139,27 @@ export default function Lots() {
                   </tr>
                 );
               })}
+              {productsWithoutLot.map(p => (
+                <tr key={`empty-${p.id}`} className="border-t border-gray-100 bg-gray-50/60">
+                  <td className="px-4 py-3 text-gray-400">—</td>
+                  <td className="px-4 py-3"><strong>{p.name}</strong></td>
+                  <td className="px-4 py-3">{formatEmplacement(p)}</td>
+                  <td colSpan={5} className="px-4 py-3 text-gray-500">
+                    Aucun lot en stock pour ce produit —{' '}
+                    <button
+                      onClick={() => { setEdit({ productId: null, lotId: null }); setModalOpen(true); }}
+                      className="text-emerald-600 font-semibold hover:underline"
+                    >
+                      ajouter un lot
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && productsWithoutLot.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-gray-500">Aucun lot trouvé</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

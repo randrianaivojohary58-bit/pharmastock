@@ -23,7 +23,7 @@ export default function StockAlerts({ products }) {
       </div>
 
       {alerts.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-8">Aucun produit en rupture ✓</p>
+        <p className="text-xs text-gray-400 text-center py-8">Aucun produit en rupture ni en stock bas</p>
       ) : (
         <div className="overflow-x-auto max-h-80 overflow-y-auto">
           <table className="w-full text-xs">

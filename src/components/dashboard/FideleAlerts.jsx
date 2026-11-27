@@ -46,7 +46,7 @@ export default function FideleAlerts({ sales, clients }) {
         {alerts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 py-8">
             <Star className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-xs">Aucun client à relancer ✓</p>
+            <p className="text-xs">Aucun client à relancer</p>
           </div>
         ) : (
           alerts.map((a, i) => {

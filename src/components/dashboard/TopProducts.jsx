@@ -24,9 +24,9 @@ export default function TopProducts({ sales }) {
         <div>
           <h3 className="text-sm font-bold flex items-center gap-2">
             <Trophy className="w-4 h-4 text-orange-500" />
-            Top 5 Produits
+            Top 5 produits
           </h3>
-          <span className="text-xs text-gray-500">Meilleures ventes</span>
+          <span className="text-xs text-gray-500">Classés par quantité vendue</span>
         </div>
       </div>
       

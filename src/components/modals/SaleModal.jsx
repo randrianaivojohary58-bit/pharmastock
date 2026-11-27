@@ -6,10 +6,17 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { formatMoney } from '../../utils/format';
 import { formatDate } from '../../utils/dates';
+import { getLotPromo, applyPromo } from '../../utils/promotions';
 import { todayStr, addDaysStr, isOverdue, CREDIT_DAYS } from '../../utils/salesStats';
 import { FileText, Receipt, Lock, AlertCircle, Clock, Star } from 'lucide-react';
 
-const getPriceForClient = (product, clientType) => {
+// Prix selon le type de client, avec la promotion éventuelle du LOT choisi
+const getPriceForClient = (product, clientType, lotId) => {
+  if (!product) return 0;
+  return applyPromo(getBasePrice(product, clientType), getLotPromo(product, lotId));
+};
+
+const getBasePrice = (product, clientType) => {
   if (!product) return 0;
   const type = (clientType || '').trim().toLowerCase();
   if (type === 'grossiste') return product.priceGrossiste || product.price;
@@ -27,6 +34,8 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
   const isCaissier = profile?.roleKey === 'caissier';
 
   const [docType, setDocType] = useState('Facture');
+  const [productSearch, setProductSearch] = useState('');
+  const [activeProductSelect, setActiveProductSelect] = useState(null);
 
   const [form, setForm] = useState({
     client: '', date: todayStr(),
@@ -80,11 +89,12 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
         lines: sale.products.map(p => {
           const product = products.find(prod => prod.id === p.productId);
           const lotObj = product?.lots.find(lo => lo._db_id === p.lot || lo.id === p.lot);
+          const lotId = lotObj ? lotObj.id : (p.lot || '');
           return {
             productId: p.productId,
-            lot: lotObj ? lotObj.id : (p.lot || ''),
+            lot: lotId,
             quantity: p.quantity,
-            price: getPriceForClient(product, sale.clientType)
+            price: getPriceForClient(product, sale.clientType, lotId)
           };
         })
       });
@@ -109,7 +119,7 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
         if (!line.productId) return line;
         const product = products.find(p => p.id === line.productId);
         if (!product) return line;
-        const newPrice = getPriceForClient(product, clientType);
+        const newPrice = getPriceForClient(product, clientType, line.lot);
         if (newPrice !== line.price) {
           hasChanged = true;
           return { ...line, price: newPrice };
@@ -131,7 +141,7 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
       const product = products.find(p => p.id === value);
       const lots = product?.lots.filter(l => l.stock > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry)) || [];
       newLines[i].lot = lots[0]?.id || '';
-      if (product) newLines[i].price = getPriceForClient(product, clientType);
+      if (product) newLines[i].price = getPriceForClient(product, clientType, newLines[i].lot);
     }
 
     if (field === 'lot') {
@@ -140,6 +150,8 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
       if (selectedLot && newLines[i].quantity > selectedLot.stock) {
         newLines[i].quantity = selectedLot.stock;
       }
+      // Le prix suit le lot choisi (promotion éventuelle du lot)
+      if (product) newLines[i].price = getPriceForClient(product, clientType, value);
     }
 
     setForm({ ...form, lines: newLines });
@@ -219,6 +231,13 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
   // Validation + construction des données (partagé entre "Enregistrer" et "Proforma")
   const buildSaleData = (asProforma = false) => {
     if (!form.client) { showToast('Attention', 'Sélectionnez un client', 'error'); return null; }
+
+    // Un même produit ne peut apparaître que sur une seule ligne
+    const ids = form.lines.map(l => l.productId).filter(Boolean);
+    if (new Set(ids).size !== ids.length) {
+      showToast('Attention', 'Le même produit est présent sur plusieurs lignes', 'error');
+      return null;
+    }
 
     for (const line of form.lines) {
       if (!line.productId) continue;
@@ -531,6 +550,19 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
               const lots = product?.lots.filter(l => l.stock > 0).sort((a, b) => new Date(a.expiry) - new Date(b.expiry)) || [];
               const info = getLineInfo(line);
 
+              // Produits déjà choisis sur les AUTRES lignes : on ne les propose plus
+              const usedIds = form.lines
+                .filter((_, idx) => idx !== i)
+                .map(l => l.productId)
+                .filter(Boolean);
+              const query = productSearch.trim().toLowerCase();
+              const availableProducts = products.filter(p => {
+                if (usedIds.includes(p.id)) return false;
+                if (!query) return true;
+                return [p.name, p.code, p.barcode, p.dci, p.reference]
+                  .some(value => String(value || '').toLowerCase().includes(query));
+              });
+
               if (isCaisseMode) {
                 return (
                   <div key={i} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -545,11 +577,63 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
 
               return (
                 <div key={i} className="grid grid-cols-12 gap-3 items-start">
-                  <div className="col-span-4">
-                    <select value={line.productId} onChange={(e) => updateLine(i, 'productId', e.target.value)} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs">
-                      <option value="">Sélectionner</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
+                  <div className="col-span-4 relative">
+                    <input
+                      type="text"
+                      value={activeProductSelect === i ? productSearch : (product?.name || '')}
+                      onFocus={() => {
+                        setActiveProductSelect(i);
+                        setProductSearch('');
+                      }}
+                      onChange={(e) => {
+                        setActiveProductSelect(i);
+                        setProductSearch(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setActiveProductSelect(null);
+                          setProductSearch('');
+                        }
+                      }}
+                      placeholder="Rechercher ou sélectionner un produit..."
+                      autoComplete="off"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    />
+                    {activeProductSelect === i && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl">
+                        {availableProducts.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              updateLine(i, 'productId', p.id);
+                              setActiveProductSelect(null);
+                              setProductSearch('');
+                            }}
+                            className={`w-full px-3 py-2.5 text-left hover:bg-emerald-50 border-b border-gray-100 last:border-0 ${
+                              line.productId === p.id ? 'bg-emerald-50' : ''
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 text-xs font-semibold text-gray-800">
+                              {p.name}
+                              {(p.lots || []).some(l => l.stock > 0 && l.promoRate > 0) && (
+                                <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[9px] font-bold">
+                                  LOT EN PROMO
+                                </span>
+                              )}
+                            </span>
+                            <span className="block mt-0.5 text-[10px] text-gray-500">
+                              {p.code || p.barcode || p.dci || 'Produit'} · Stock : {p.stock || 0}
+                            </span>
+                          </button>
+                        ))}
+                        {availableProducts.length === 0 && (
+                          <p className="px-3 py-4 text-center text-xs text-gray-500">
+                            Aucun produit trouvé
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {product && (
                       <div className="mt-1.5 text-[10px] text-gray-500">
                         Stock: <strong className="text-emerald-700">{info.stock}</strong> · Dispo: <strong className={info.available === 0 ? 'text-red-600' : 'text-emerald-700'}>{info.available}</strong>
@@ -567,10 +651,17 @@ export default function SaleModal({ isOpen, onClose, sale, onSuccess, startAsCre
                         <option value="">Lot FEFO</option>
                         {lots.map(l => (
                           <option key={l.id} value={l.id}>
-                            {l.id} ({formatDate(l.expiry)}) - {l.stock}
+                            {l.id} ({formatDate(l.expiry)}) - {l.stock}{l.promoRate > 0 ? ` · PROMO -${l.promoRate}%` : ''}
                           </option>
                         ))}
                       </select>
+                    )}
+                    {product && getLotPromo(product, line.lot) > 0 && (
+                      <div className="mt-1.5 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-[10px] text-orange-700 font-semibold">
+                        Promo lot -{getLotPromo(product, line.lot)}% :{' '}
+                        <span className="line-through text-gray-400 font-normal">{formatMoney(getBasePrice(product, clientType))}</span>
+                        {' '}→ {formatMoney(line.price)}
+                      </div>
                     )}
                   </div>
 
